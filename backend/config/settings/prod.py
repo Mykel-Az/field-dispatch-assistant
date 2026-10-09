@@ -1,9 +1,7 @@
 import dj_database_url
-
-from .base import *
 from dotenv import load_dotenv
+from .base import *
 
-load_dotenv()
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///db.sqlite3")
 
