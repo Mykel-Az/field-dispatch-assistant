@@ -1,6 +1,6 @@
 import dj_database_url
-from .base import *
 
+from .base import *
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///db.sqlite3")
 
