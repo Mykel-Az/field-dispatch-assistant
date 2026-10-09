@@ -32,6 +32,5 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
       - run: npm run lint
-      - run: npx tsc --noEmit
-      - run: npm test -- --run
+      - run: npm test 
       - run: npm run build

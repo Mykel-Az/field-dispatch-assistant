@@ -1,12 +1,16 @@
-from django.shortcuts import render
-
-from rest_framework import status
+from drf_spectacular.utils import extend_schema
+from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-# Create your views here.
 
-@api_view(['GET'])
+# Create your views here.
+from .models import Skill
+from .serializers import HealthSerializer, SkillSerializer
+
+
+@extend_schema(responses=HealthSerializer)
+@api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request):
     """
@@ -15,11 +19,12 @@ def health_check(request):
     return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def skills(request):
+class SkillViewSet(generics.ListAPIView):
     """
-    Endpoint to retrieve a list of skills.
+    API endpoint that allows skills to be viewed or created.
     """
-    skills_list = ["Skill 1", "Skill 2", "Skill 3"]  # Replace with actual skill retrieval logic
-    return Response({"skills": skills_list}, status=status.HTTP_200_OK)
+
+    queryset = Skill.objects.all()
+    serializer_class = SkillSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None  # Disable pagination for this view
