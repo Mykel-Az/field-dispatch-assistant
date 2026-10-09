@@ -1,0 +1,19 @@
+[importlinter]
+include_external_packages=True
+root_packages =
+    dispatch_engine
+    geocoding
+    api
+    config
+
+[importlinter:contract:domain-isolated]
+name = Domain layer must not import infrastructure
+type = forbidden
+source_modules =
+    dispatch_engine
+forbidden_modules =
+    api
+    geocoding
+    config
+    django
+    rest_framework
