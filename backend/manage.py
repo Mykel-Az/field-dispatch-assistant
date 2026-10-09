@@ -4,6 +4,8 @@ import os
 import sys
 from dotenv import load_dotenv
 
+load_dotenv()  
+
 env = os.getenv("DJANGO_ENV", 'config.settings.local')
 
 print(f"Using settings module: {env}")

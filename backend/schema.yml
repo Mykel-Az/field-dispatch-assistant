@@ -16,11 +16,15 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
   /api/skills/:
     get:
-      operationId: skills_retrieve
-      description: Endpoint to retrieve a list of skills.
+      operationId: skills_list
+      description: API endpoint that allows skills to be viewed or created.
       tags:
       - skills
       security:
@@ -29,8 +33,37 @@ paths:
       - {}
       responses:
         '200':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Skill'
+          description: ''
 components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+      - status
+    Skill:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          nullable: true
+      required:
+      - id
+      - name
   securitySchemes:
     basicAuth:
       type: http
