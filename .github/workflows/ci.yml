@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
       - run: pip install -r requirements.txt
+      - run: python manage.py makemigrations --check --dry-run
       - run: ruff check . && ruff format --check .
       - run: lint-imports
       - run: pytest
