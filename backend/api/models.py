@@ -2,12 +2,12 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.db.models.functions import Lower
 
-from .manager import TenanatQuerySet
+from .manager import TenantQuerySet, TenantScopedModel
 
 # Create your models here.
 
 
-class CustomUserManager(BaseUserManager.from_queryset(TenanatQuerySet)):
+class CustomUserManager(BaseUserManager.from_queryset(TenantQuerySet)):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
             raise ValueError("The Email field must be set")
@@ -59,7 +59,7 @@ class Organization(models.Model):
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    update_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
         return self.name
@@ -73,7 +73,7 @@ class CustomUser(AbstractUser):
 
     username = None
     email = models.EmailField(unique=True, verbose_name="email address")
-    role = models.CharField(max_length=20, choices=Role.choices, blank=True, null=True)
+    role = models.CharField(max_length=20, choices=Role.choices, blank=True, default="")
     organization = models.ForeignKey(
         Organization,
         on_delete=models.PROTECT,
@@ -90,17 +90,9 @@ class CustomUser(AbstractUser):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=(
-                    (
-                        models.Q(is_superuser=True, organization__isnull=True)
-                        | models.Q(is_superuser=False, organization__isnull=False)
-                    )
-                    & (
-                        models.Q(is_superuser=True, role__isnull=True)
-                        | models.Q(is_superuser=False, role__isnull=False)
-                    )
-                ),
-                name="organization_and_role_null_only_for_superuser",
+                condition=models.Q(is_superuser=True)
+                | (models.Q(organization__isnull=False) & ~models.Q(role="")),
+                name="non_superuser_has_org_and_role",
             ),
             models.UniqueConstraint(Lower("email"), name="unique_lower_case_email"),
         ]
@@ -109,8 +101,7 @@ class CustomUser(AbstractUser):
         return f"{self.get_full_name()} - ({self.email}) - {self.role}"
 
 
-class Technician(models.Model):
-    # organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name="technicians" )
+class Technician(TenantScopedModel):
     user = models.OneToOneField(
         CustomUser, on_delete=models.CASCADE, related_name="technician_profile"
     )

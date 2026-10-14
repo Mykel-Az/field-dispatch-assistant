@@ -1,6 +1,21 @@
 from django.db import models
 
 
-class TenanatQuerySet(models.QuerySet):
+class TenantQuerySet(models.QuerySet):
+    """Adds .for_organization(org) to any manager built from it."""
+
     def for_organization(self, org):
         return self.filter(organization=org)
+
+
+class TenantScopedModel(models.Model):
+    """Abstract base for every model that belongs to exactly one organization."""
+
+    organization = models.ForeignKey(
+        "Organization", on_delete=models.PROTECT, related_name="%(class)ss"
+    )
+
+    objects = TenantQuerySet.as_manager()
+
+    class Meta:
+        abstract = True

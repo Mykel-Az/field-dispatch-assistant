@@ -106,7 +106,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "5/minute",  # Protects login/register from brute force
         "user": "120/minute",
+        "register": "5/hour",
+        "login": "10/min",
     },
+    "NUM_PROXIES": 10,
 }
 
 SPECTACULAR_SETTINGS = {
