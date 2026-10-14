@@ -52,9 +52,8 @@ class OrganizationAdmin(admin.ModelAdmin):
     list_display = ["name", "email", "phone_number", "is_active", "created_at"]
     search_fields = ["name", "email"]
     list_filter = ["is_active"]
-    readonly_fields = []
 
 
-admin.site.register(Organization)
+admin.site.register(Organization, OrganizationAdmin)
 
 admin.site.register(Skill)

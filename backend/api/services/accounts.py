@@ -10,17 +10,15 @@ User = get_user_model()
 def register_organization(
     *,
     organization_name,
-    username="",
     email,
-    fisrt_name,
+    first_name,
     last_name,
     password,
 ):
     organization = Organization.objects.create(name=organization_name)
     return User.objects.create_user(
-        username=username,
-        email=email,
-        fisrt_name=fisrt_name,
+        email=email.lower(),
+        first_name=first_name,
         last_name=last_name,
         password=password,
         role=User.Role.HEAD_DISPATCHER,
@@ -29,10 +27,13 @@ def register_organization(
 
 
 @transaction.atomic
-def create_staff_user(*, creator, role, username="", email, password, **tech_fields):
+def create_staff_user(
+    *, creator, role, first_name="", last_name="", email, password, **tech_fields
+):
     user = User.objects.create_user(
-        username=username,
         email=email,
+        first_name=first_name,
+        last_name=last_name,
         password=password,
         role=role,
         organization=creator.organization,  # never taken from the request
@@ -44,9 +45,19 @@ def create_staff_user(*, creator, role, username="", email, password, **tech_fie
     return user
 
 
-def login(request, user):
-    pass
+class LastHeadError(Exception): ...
 
 
-def logout(request):
-    pass
+@transaction.atomic
+def deactivate_user(*, actor, target):
+    org = Organization.objects.select_for_update().get(pk=actor.organization_id)
+    if target.role == User.Role.HEAD_DISPATCHER and target.is_active:
+        others = (
+            User.objects.for_organization(org)
+            .filter(role=User.Role.HEAD_DISPATCHER, is_active=True)
+            .exclude(pk=target.pk)
+        )
+        if not others.exists():
+            raise LastHeadError
+    target.is_active = False
+    target.save(update_fields=["is_active"])

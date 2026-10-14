@@ -17,7 +17,7 @@ class HasRole(BasePermission):
 
 
 class IsHeadDispatcher(HasRole):
-    allowed_role = CustomUser.Role.HEAD_DISPATCHER
+    allowed_role = (CustomUser.Role.HEAD_DISPATCHER,)
 
 
 class IsDispatcher(HasRole):
@@ -25,4 +25,4 @@ class IsDispatcher(HasRole):
 
 
 class IsTechnician(HasRole):
-    allowed_role = CustomUser.Role.TECHNICIAN
+    allowed_role = (CustomUser.Role.TECHNICIAN,)
