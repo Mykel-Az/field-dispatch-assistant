@@ -4,6 +4,109 @@ info:
   version: 1.0.0
   description: API documentation for the Field Dispatch Assistant project.
 paths:
+  /api/auth/change-password/:
+    post:
+      operationId: auth_change_password_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+        required: true
+      responses:
+        '204':
+          description: No response body
+  /api/auth/csrf/:
+    get:
+      operationId: auth_csrf_retrieve
+      description: Get a CSRF token. Responds with 204 No Content.
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/auth/logout/:
+    post:
+      operationId: auth_logout_create
+      tags:
+      - auth
+      responses:
+        '204':
+          description: No response body
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      tags:
+      - auth
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Register'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Register'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
   /api/health/:
     get:
       operationId: health_retrieve
@@ -11,8 +114,6 @@ paths:
       tags:
       - health
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -21,16 +122,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
           description: ''
+  /api/organization/:
+    get:
+      operationId: organization_retrieve
+      description: The requester's own organization. There is no id in the URL on
+        purpose.
+      tags:
+      - organization
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    patch:
+      operationId: organization_partial_update
+      description: The requester's own organization. There is no id in the URL on
+        purpose.
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
   /api/skills/:
     get:
       operationId: skills_list
       description: API endpoint that allows skills to be viewed or created.
       tags:
       - skills
-      security:
-      - cookieAuth: []
-      - basicAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -40,8 +175,194 @@ paths:
                 items:
                   $ref: '#/components/schemas/Skill'
           description: ''
+  /api/users/:
+    get:
+      operationId: users_list
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      description: Head dispatchers manage the users of their own organization.
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this custom user.
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this custom user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserUpdate'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/deactivate/:
+    post:
+      operationId: users_deactivate_create
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this custom user.
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/reactivate/:
+    post:
+      operationId: users_reactivate_create
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this custom user.
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/set-password/:
+    post:
+      operationId: users_set_password_create
+      description: Head dispatchers manage the users of their own organization.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this custom user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPassword'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SetPassword'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SetPassword'
+        required: true
+      responses:
+        '204':
+          description: No response body
 components:
   schemas:
+    ChangePassword:
+      type: object
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+      required:
+      - current_password
+      - new_password
+    GeocodeStatusEnum:
+      enum:
+      - pending
+      - manual
+      - ok
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `manual` - Manual
+        * `ok` - OK
+        * `failed` - Failed
     Health:
       type: object
       properties:
@@ -49,6 +370,217 @@ components:
           type: string
       required:
       - status
+    Login:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        address:
+          type: string
+          maxLength: 255
+        lat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+          nullable: true
+        lng:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+          nullable: true
+        geocode_status:
+          allOf:
+          - $ref: '#/components/schemas/GeocodeStatusEnum'
+          readOnly: true
+        work_start:
+          type: string
+          format: time
+          nullable: true
+        work_end:
+          type: string
+          format: time
+          nullable: true
+        scoring_strategy:
+          $ref: '#/components/schemas/ScoringStrategyEnum'
+        is_configured:
+          type: boolean
+          readOnly: true
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - geocode_status
+      - id
+      - is_configured
+      - name
+      - version
+    OrganizationSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - id
+      - name
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PatchedOrganization:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 254
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 20
+        address:
+          type: string
+          maxLength: 255
+        lat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+          nullable: true
+        lng:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+          nullable: true
+        geocode_status:
+          allOf:
+          - $ref: '#/components/schemas/GeocodeStatusEnum'
+          readOnly: true
+        work_start:
+          type: string
+          format: time
+          nullable: true
+        work_end:
+          type: string
+          format: time
+          nullable: true
+        scoring_strategy:
+          $ref: '#/components/schemas/ScoringStrategyEnum'
+        is_configured:
+          type: boolean
+          readOnly: true
+        version:
+          type: integer
+          minimum: 1
+    PatchedUserUpdate:
+      type: object
+      description: PATCH /users/{id}/ accepts full_name only; anything else is a 400.
+      properties:
+        full_name:
+          type: string
+          maxLength: 150
+    Register:
+      type: object
+      properties:
+        organization_name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          maxLength: 150
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - full_name
+      - organization_name
+      - password
+    RoleEnum:
+      enum:
+      - head_dispatcher
+      - dispatcher
+      - technician
+      type: string
+      description: |-
+        * `head_dispatcher` - Head Dispatcher
+        * `dispatcher` - Dispatcher
+        * `technician` - Technician
+    ScoringStrategyEnum:
+      enum:
+      - balanced
+      type: string
+      description: '* `balanced` - Balanced'
+    SetPassword:
+      type: object
+      properties:
+        new_password:
+          type: string
+          writeOnly: true
+      required:
+      - new_password
     Skill:
       type: object
       properties:
@@ -64,11 +596,77 @@ components:
       required:
       - id
       - name
-  securitySchemes:
-    basicAuth:
-      type: http
-      scheme: basic
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid
+    StaffCreate:
+      type: object
+      description: Input for POST /users/. There is deliberately no `organization`
+        field.
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+        full_name:
+          type: string
+          maxLength: 150
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        technician:
+          $ref: '#/components/schemas/TechnicianInput'
+      required:
+      - email
+      - full_name
+      - password
+      - role
+    TechnicianInput:
+      type: object
+      properties:
+        skill_ids:
+          type: array
+          items:
+            type: integer
+        shift_start:
+          type: string
+          format: time
+        shift_end:
+          type: string
+          format: time
+      required:
+      - shift_end
+      - shift_start
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Email address
+        full_name:
+          type: string
+          readOnly: true
+        role:
+          allOf:
+          - $ref: '#/components/schemas/RoleEnum'
+          readOnly: true
+        is_active:
+          type: boolean
+          readOnly: true
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+        organization:
+          allOf:
+          - $ref: '#/components/schemas/OrganizationSummary'
+          readOnly: true
+      required:
+      - email
+      - full_name
+      - id
+      - is_active
+      - organization
+      - role
