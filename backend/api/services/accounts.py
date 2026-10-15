@@ -1,25 +1,49 @@
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from ..models import Organization, Technician
 
 User = get_user_model()
 
 
+class AccountError(Exception):
+    """Base class. `code` is what the API puts in the response."""
+
+    code = "error"
+
+
+class EmailUnavailableError(AccountError):
+    code = "email_unavailable"
+
+
+class LastHeadError(AccountError):
+    code = "last_head"
+
+
+class CannotChangeOwnPasswordHereError(AccountError):
+    code = "use_change_password"
+
+
+def _create_user(**fields):
+    """Create a user; a duplicate email (any letter case) is a normal outcome."""
+    email = fields["email"].lower()
+    if User.objects.filter(email__iexact=email).exists():
+        raise EmailUnavailableError
+    try:
+        # Nested atomic: an IntegrityError must not poison the outer transaction.
+        with transaction.atomic():
+            return User.objects.create_user(**{**fields, "email": email})
+    except IntegrityError as exc:  # two requests raced past the exists() check
+        raise EmailUnavailableError from exc
+
+
 @transaction.atomic
-def register_organization(
-    *,
-    organization_name,
-    email,
-    first_name,
-    last_name,
-    password,
-):
+def register_organization(*, organization_name, email, full_name, password):
+    """Create a new organization and its first head dispatcher, atomically."""
     organization = Organization.objects.create(name=organization_name)
-    return User.objects.create_user(
-        email=email.lower(),
-        first_name=first_name,
-        last_name=last_name,
+    return _create_user(
+        email=email,
+        full_name=full_name,
         password=password,
         role=User.Role.HEAD_DISPATCHER,
         organization=organization,
@@ -27,37 +51,77 @@ def register_organization(
 
 
 @transaction.atomic
-def create_staff_user(
-    *, creator, role, first_name="", last_name="", email, password, **tech_fields
-):
-    user = User.objects.create_user(
+def create_staff_user(*, creator, email, password, full_name, role, technician=None):
+    """Create a user inside the creator's organization (never taken from the request).
+
+    `technician` is a dict {"skills": [...], "shift_start": t, "shift_end": t}
+    and is required when role is technician.
+    """
+    organization = creator.organization
+    user = _create_user(
         email=email,
-        first_name=first_name,
-        last_name=last_name,
+        full_name=full_name,
         password=password,
         role=role,
-        organization=creator.organization,  # never taken from the request
+        organization=organization,
     )
     if role == User.Role.TECHNICIAN:
-        Technician.objects.create(
-            user=user, organization=creator.organization, **tech_fields
+        profile = Technician.objects.create(
+            user=user,
+            organization=organization,
+            shift_start=technician["shift_start"],
+            shift_end=technician["shift_end"],
         )
+        profile.skills.set(technician.get("skills", []))
     return user
-
-
-class LastHeadError(Exception): ...
 
 
 @transaction.atomic
 def deactivate_user(*, actor, target):
-    org = Organization.objects.select_for_update().get(pk=actor.organization_id)
-    if target.role == User.Role.HEAD_DISPATCHER and target.is_active:
-        others = (
-            User.objects.for_organization(org)
+    """Deactivate a user in the actor's organization. Idempotent."""
+    # Lock the organization row: two heads deactivating each other are serialised.
+    organization = Organization.objects.select_for_update().get(
+        pk=actor.organization_id
+    )
+    target = (
+        User.objects.for_organization(organization)
+        .select_for_update()
+        .get(pk=target.pk)
+    )
+    if not target.is_active:
+        return target
+    if target.role == User.Role.HEAD_DISPATCHER:
+        other_heads = (
+            User.objects.for_organization(organization)
             .filter(role=User.Role.HEAD_DISPATCHER, is_active=True)
             .exclude(pk=target.pk)
         )
-        if not others.exists():
+        if not other_heads.exists():
             raise LastHeadError
+    # TIME: when Job exists (S1-3): refuse with 409 has_ongoing_job and return
+    # the technician's Assigned jobs to the queue here, in this transaction.
     target.is_active = False
     target.save(update_fields=["is_active"])
+    return target
+
+
+@transaction.atomic
+def reactivate_user(*, actor, target):
+    """Reactivate a user in the actor's organization. Idempotent."""
+    target = (
+        User.objects.for_organization(actor.organization)
+        .select_for_update()
+        .get(pk=target.pk)
+    )
+    if not target.is_active:
+        target.is_active = True
+        target.save(update_fields=["is_active"])
+    return target
+
+
+def set_password(*, actor, target, new_password):
+    """Head sets another user's password. Their sessions die (auth hash changes)."""
+    if actor.pk == target.pk:
+        raise CannotChangeOwnPasswordHereError
+    target.set_password(new_password)  # why does it call it own function(Recurtion)
+    target.save(update_fields=["password"])

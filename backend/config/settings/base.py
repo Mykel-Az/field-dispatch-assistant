@@ -98,18 +98,21 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "api.authentication.CustomSessionAuthentication"
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
-    "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
-    ],
+    "DEFAULT_PERMISSION_CLASSES": ["api.permissions.DenyAll"],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+    # Login and register name their own scoped throttles; everything else is
+    # limited per signed-in user only (an anonymous default would let one visitor
+    # reloading the page lock out everyone behind the same IP).
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.UserRateThrottle"],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "5/minute",  # Protects login/register from brute force
         "user": "120/minute",
         "register": "5/hour",
         "login": "10/min",
     },
-    "NUM_PROXIES": 10,
+    # How many reverse proxies sit in front of Django. Wrong values let a client
+    # spoof its IP via X-Forwarded-For and dodge throttling. Set from the S1-1e spike.
+    "NUM_PROXIES": int(os.getenv("NUM_PROXIES", "1")),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -164,5 +167,8 @@ MAILERS = {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+# replace above with
+# EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 AUTH_USER_MODEL = "api.CustomUser"

@@ -20,6 +20,14 @@ STORAGES = {
     },
 }
 
+# Throttle counters must be shared by every gunicorn worker, so use the database
+# (run `python manage.py createcachetable` once per deploy(add to render start)). Redis is the upgrade.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
