@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.db import transaction
 from django.utils.decorators import method_decorator
@@ -49,6 +51,11 @@ def health_check(request):
     """
     Health check endpoint to verify the API is running.
     """
+    logging.getLogger("django").warning(
+        "XFF=%s REMOTE=%s",
+        request.META.get("HTTP_X_FORWARDED_FOR"),
+        request.META.get("REMOTE_ADDR"),
+    )
     return Response({"status": "ok"}, status=status.HTTP_200_OK)
 
 
@@ -78,7 +85,13 @@ class RegisterView(APIView):
                 {"email": ["Email unavailable."]}
             ) from None  # why from None
         login(request, user)
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "status": "ok",
+                "xff": request.META.get("HTTP_X_FORWARDED_FOR"),
+                "remote": request.META.get("REMOTE_ADDR"),
+            }
+        )
 
 
 @method_decorator(csrf_protect, name="dispatch")
