@@ -25,3 +25,7 @@ existing "unavailable technician" exception.
 - Bumped customers get rescheduled; the explanation and status history record
   why. If no bump candidate exists, the failure is an expected outcome with a
   message, not an error.
+
+> **Amendment 2026-10-13:** `force-assign` is allowed for dispatchers and head
+> dispatchers; technicians get 403. The target technician must belong to the
+> caller's organization (otherwise 404).
