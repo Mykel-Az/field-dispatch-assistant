@@ -19,3 +19,6 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [012](012-closing-time-feasibility-gate.md) | Closing-time feasibility gate |
 | [013](013-vite-react-frontend.md) | Vite + React frontend |
 | [014](014-render-neon-hosting.md) | Render + Neon hosting |
+| [015](015-session-cookie-auth.md) | Session-cookie authentication |
+| [016](016-multi-tenancy-explicit-scoping.md) | Multi-tenancy with explicit scoping |
+| [017](017-roles-immutability-global-email.md) | Roles, immutability, global email |

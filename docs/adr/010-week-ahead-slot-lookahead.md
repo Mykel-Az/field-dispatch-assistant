@@ -19,3 +19,6 @@ supports this and gives a plain UniqueConstraint on
 ## Trade-offs
 - Days are planned independently, so weekly workload may be less balanced
   than a joint plan would give. Accepted and documented.
+
+> **Amendment (TIME):** lookahead is reduced from one week to today +
+> tomorrow. Full-fidelity path: one-week lookahead as originally decided.
