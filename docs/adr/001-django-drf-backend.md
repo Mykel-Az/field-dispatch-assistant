@@ -26,3 +26,6 @@ Django + DRF on PostgreSQL. drf-spectacular produces the OpenAPI schema.
 - Scale: pagination, indexes on status / technician / date, and a thin
   map-poll endpoint. The assignment run stays in-request at capstone scale.
   Moving it to a background worker is a documented scale path, not built.
+
+> **Amendment 2026-10-13:** Authentication is Django session-cookie auth, not
+> DRF TokenAuthentication; see ADR-015. Tenancy is ADR-016, roles ADR-017.

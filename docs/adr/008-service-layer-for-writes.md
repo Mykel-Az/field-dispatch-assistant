@@ -22,3 +22,10 @@ that logic in views or serializers makes it hard to test and easy to bypass.
 ## Trade-offs
 - One more layer to navigate. In return the services are testable against a
   real Postgres in CI, including concurrency cases.
+
+
+> **Amendment 2026-10-13:** Every service function takes `organization` as an
+> explicit argument and uses `for_organization`; services verify that any
+> foreign object they are handed belongs to that organization (invariant #24).
+> `adapters.py` builds the per-organization engine config from Organization
+> fields. The engine still never imports Organization or Django.
