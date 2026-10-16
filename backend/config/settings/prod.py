@@ -35,8 +35,6 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_AGE = 14 * 3600
 
-
-# Without this, a production 500 leaves no trace in Render's logs.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
