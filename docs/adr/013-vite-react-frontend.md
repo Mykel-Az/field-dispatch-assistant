@@ -21,3 +21,6 @@ the backend OpenAPI schema (drf-spectacular → openapi-typescript).
 - No SSR, so first paint waits on JS. Acceptable for an authenticated tool.
 - Generated types must be regenerated whenever the API changes
   (`npm run api:types`); the diff is reviewed in the PR.
+
+## Amendment 2026-10-17: styling
+Styling: Tailwind CSS v4 via `@tailwindcss/vite`; shared class strings in `shared/ui.ts`.
