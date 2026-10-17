@@ -10,8 +10,6 @@ from .conftest import api_endpoints, client_for
 
 ANON, TECH, DISP, HEAD, SUPER = "anon", "technician", "dispatcher", "head", "superuser"
 
-# (method, path, body, {who: expected status}). A request that passes the
-# permission check and then fails validation (400) still proves it was allowed.
 MATRIX = [
     ("get", "/api/auth/me/", None,
      {ANON: 401, TECH: 200, DISP: 200, HEAD: 200, SUPER: 403}),
@@ -45,7 +43,6 @@ def clients(head_a, dispatcher_a, technician_a, superuser):
     ids=[f"{m.upper()} {p}" for m, p, _, _ in MATRIX],
 )
 def test_role_matrix(clients, method, path, body, expected):
-    # Roles that must be refused go first: HEAD's successful PATCH changes state.
     order = [ANON, TECH, DISP, SUPER, HEAD]
     for who in order:
         response = getattr(clients[who], method)(path, body, format="json")
