@@ -12,7 +12,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .mixins import TenantScopedViewMixin
-from .models import Organization, Skill
+from .models import Organization, Skill, Technician
 from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
 from .serializers import (
     GENERIC_LOGIN_ERROR,
@@ -24,6 +24,8 @@ from .serializers import (
     SetPasswordSerializer,
     SkillSerializer,
     StaffCreateSerializer,
+    TechnicianDetailSerializer,
+    TechnicianInputSerializer,
     UserSerializer,
     UserUpdateSerializer,
 )
@@ -232,7 +234,7 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user.organization
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer):  # race conditions
         with transaction.atomic():
             org = Organization.objects.select_for_update().get(
                 pk=serializer.instance.pk
@@ -250,6 +252,40 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
                 setattr(org, field, value)
             org.version += 1  # the client's version is replaced, not stored
             org.save()
+
+
+class TechnicianViewSet(
+    TenantScopedViewMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = Technician.objects.order_by("user.full_name", "id").filter(
+        role=User.Role.TECHNICIAN
+    )
+    permission_classes = [IsDispatcher, IsHeadDispatcher]
+    serializer_class = TechnicianDetailSerializer
+    pagination_class = None
+    http_method_names = ["get", "post", "patch"]
+
+    @extend_schema(
+        request=TechnicianInputSerializer, responses=TechnicianDetailSerializer
+    )
+    def partial_update(self, request, pk=None):
+        if pk is None:
+            return Response(
+                {"detail": "Method PATCH not allowed on list endpoint."},
+                status=status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+        Tech = generics.get_object_or_404(
+            Technician, pk=pk
+        )  # 404 for another organization
+        serializer = TechnicianInputSerializer(Tech, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SkillViewSet(generics.ListAPIView):

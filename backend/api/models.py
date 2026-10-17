@@ -150,7 +150,7 @@ class Technician(TenantScopedModel):
     shift_start = models.TimeField()
     shift_end = models.TimeField()
 
-    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.CharField(max_length=255, blank=True, null=True)
     latitude = models.FloatField(blank=True, null=True)
     longitude = models.FloatField(blank=True, null=True)

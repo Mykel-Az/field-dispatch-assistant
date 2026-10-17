@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Organization, Skill
+from .models import Organization, Skill, Technician
 from .services.accounts import register_organization
 
 User = get_user_model()
@@ -98,6 +98,22 @@ class TechnicianInputSerializer(serializers.Serializer):
         if attrs["shift_end"] <= attrs["shift_start"]:
             raise serializers.ValidationError("shift_end must be after shift_start.")
         return attrs
+
+
+class TechnicianDetailSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Technician
+        fields = [
+            "id",
+            "user",
+            "skills",
+            "shift_start",
+            "shift_end",
+            "phone",
+            "address",
+        ]
 
 
 class StaffCreateSerializer(serializers.Serializer):
