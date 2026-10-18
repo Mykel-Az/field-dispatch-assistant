@@ -25,7 +25,7 @@ from .serializers import (
     SkillSerializer,
     StaffCreateSerializer,
     TechnicianDetailSerializer,
-    TechnicianInputSerializer,
+    TechnicianUpdateSerializer,
     UserSerializer,
     UserUpdateSerializer,
 )
@@ -260,32 +260,37 @@ class TechnicianViewSet(
     mixins.RetrieveModelMixin,
     viewsets.GenericViewSet,
 ):
-    queryset = Technician.objects.order_by("user.full_name", "id").filter(
-        role=User.Role.TECHNICIAN
+    """Dispatchers and heads read technicians; only heads edit them."""
+
+    queryset = (
+        Technician.objects.select_related("user__organization")
+        .prefetch_related("skills")
+        .order_by("user__full_name", "id")
     )
-    permission_classes = [IsDispatcher, IsHeadDispatcher]
+    permission_classes = [IsDispatcher]
     serializer_class = TechnicianDetailSerializer
     pagination_class = None
-    http_method_names = ["get", "post", "patch"]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action == "partial_update":
+            return [IsHeadDispatcher()]
+        return super().get_permissions()
+
+    def get_serializer_class(self):
+        if self.action == "partial_update":
+            return TechnicianUpdateSerializer
+        return TechnicianDetailSerializer
 
     @extend_schema(
-        request=TechnicianInputSerializer, responses=TechnicianDetailSerializer
+        request=TechnicianUpdateSerializer, responses=TechnicianDetailSerializer
     )
-    def partial_update(self, request, pk=None):
-        if pk is None:
-            return Response(
-                {"detail": "Method PATCH not allowed on list endpoint."},
-                status=status.HTTP_405_METHOD_NOT_ALLOWED,
-            )
-        Tech = generics.get_object_or_404(
-            Technician, pk=pk
-        )  # 404 for another organization
-        serializer = TechnicianInputSerializer(Tech, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def partial_update(self, request, *args, **kwargs):
+        technician = self.get_object()  # scoped queryset: another org's id -> 404
+        serializer = self.get_serializer(technician, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(TechnicianDetailSerializer(technician).data)
 
 
 class SkillViewSet(generics.ListAPIView):

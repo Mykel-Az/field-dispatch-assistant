@@ -100,8 +100,15 @@ class TechnicianInputSerializer(serializers.Serializer):
         return attrs
 
 
+class SkillSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ["id", "name", "description"]
+
+
 class TechnicianDetailSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    skills = SkillSerializer(many=True, read_only=True)
 
     class Meta:
         model = Technician
@@ -112,8 +119,28 @@ class TechnicianDetailSerializer(serializers.ModelSerializer):
             "shift_start",
             "shift_end",
             "phone",
-            "address",
         ]
+        read_only_fields = fields
+
+
+class TechnicianUpdateSerializer(serializers.ModelSerializer):
+    """PATCH /technicians/{id}/. No user, organization or coordinates here."""
+
+    skill_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.all(), many=True, source="skills", required=False
+    )
+
+    class Meta:
+        model = Technician
+        fields = ["skill_ids", "shift_start", "shift_end", "phone"]
+
+    def validate(self, attrs):
+        # PATCH may send only one of the two, so fall back to the stored value.
+        start = attrs.get("shift_start", self.instance.shift_start)
+        end = attrs.get("shift_end", self.instance.shift_end)
+        if end <= start:
+            raise serializers.ValidationError("shift_end must be after shift_start.")
+        return attrs
 
 
 class StaffCreateSerializer(serializers.Serializer):
@@ -205,9 +232,3 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 class HealthSerializer(serializers.Serializer):
     status = serializers.CharField()
-
-
-class SkillSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Skill
-        fields = ["id", "name", "description"]

@@ -40,26 +40,36 @@ class CustomUserManager(BaseUserManager.from_queryset(TenantQuerySet)):
         )
 
 
-class Organization(models.Model):
+class GeocodeStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    OK = "ok", "OK"
+    APPROXIMATE = "approximate", "Approximate"  # ZIP centre, street not found
+    MANUAL = "manual", "Manual"  # reserved for the map pin-drop fix
+    FAILED = "failed", "Failed"
+
+
+class AddressMixin(models.Model):
+    address = models.CharField(max_length=255, blank=True, default="")
+    postal_code = models.CharField(max_length=10, blank=True, default="")
+    lat = models.FloatField(blank=True, null=True)  # internal: never user-edited
+    lng = models.FloatField(blank=True, null=True)
+    geocode_status = models.CharField(
+        max_length=12, choices=GeocodeStatus.choices, default=GeocodeStatus.PENDING
+    )
+    location_label = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        abstract = True
+
+
+class Organization(AddressMixin, models.Model):
     class ScoringStrategy(models.TextChoices):
         BALANCED = "balanced", "Balanced"
-
-    class GeocodeStatus(models.TextChoices):
-        PENDING = "pending", "Pending"
-        MANUAL = "manual", "Manual"
-        OK = "ok", "OK"
-        FAILED = "failed", "Failed"
 
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True, default="")
     phone = models.CharField(max_length=20, blank=True, default="")
 
-    address = models.CharField(max_length=255, blank=True, default="")
-    lat = models.FloatField(blank=True, null=True)
-    lng = models.FloatField(blank=True, null=True)
-    geocode_status = models.CharField(
-        max_length=10, choices=GeocodeStatus.choices, default=GeocodeStatus.PENDING
-    )
     work_start = models.TimeField(blank=True, null=True)
     work_end = models.TimeField(blank=True, null=True)
     scoring_strategy = models.CharField(
@@ -73,7 +83,14 @@ class Organization(models.Model):
 
     @property
     def is_configured(self) -> bool:
-        return None not in (self.lat, self.lat, self.work_start, self, self.work_end)
+        """Ready to schedule: located (geocoded or pinned) and working hours set."""
+        return (
+            self.geocode_status in ("ok", "manual")
+            and self.lat is not None
+            and self.lng is not None
+            and self.work_start is not None
+            and self.work_end is not None
+        )
 
     def __str__(self) -> str:
         return self.name
@@ -151,9 +168,6 @@ class Technician(TenantScopedModel):
     shift_end = models.TimeField()
 
     phone = models.CharField(max_length=20, blank=True, null=True)
-    address = models.CharField(max_length=255, blank=True, null=True)
-    latitude = models.FloatField(blank=True, null=True)
-    longitude = models.FloatField(blank=True, null=True)
 
     def save(self, *args, **kwargs):
         # Invariant 25: a technician belongs to the same organization as its user.
