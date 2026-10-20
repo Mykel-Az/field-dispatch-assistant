@@ -19,6 +19,7 @@ export default function AppLayout() {
         <nav className="flex flex-1 gap-4">
           {staff && <NavLink to="/dashboard" className={link}>Dashboard</NavLink>}
           {!staff && <NavLink to="/tech" className={link}>My jobs</NavLink>}
+          {staff && <NavLink to="/technicians" className={link}>Technicians</NavLink>}
           {staff && <NavLink to="/organization" className={link}>Organization</NavLink>}
           {user.role === 'head_dispatcher' && <NavLink to="/users" className={link}>Team</NavLink>}
         </nav>

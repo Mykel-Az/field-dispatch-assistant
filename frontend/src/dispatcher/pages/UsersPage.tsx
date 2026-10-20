@@ -3,28 +3,24 @@ import { useAuth } from '../../auth/useAuth';
 import {
   createUser,
   deactivateUser,
-  fetchSkills,
   fetchUsers,
   reactivateUser,
-  type Skill,
 } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import { ui } from '../../shared/ui';
 import { ROLE_LABEL, type CreateUserInput, type Role, type User } from '../../shared/api/models';
 
-const EMPTY = { email: '', password: '', full_name: '', role: 'dispatcher' as Role, shift_start: '08:00', shift_end: '17:00' };
+const EMPTY = { email: '', password: '', full_name: '', role: 'dispatcher' as Role };
 
 export default function UsersPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [count, setCount] = useState(0);
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [roleFilter, setRoleFilter] = useState('');
   const [activeFilter, setActiveFilter] = useState('');
   const [loadError, setLoadError] = useState('');
   const [actionError, setActionError] = useState('');
   const [form, setForm] = useState(EMPTY);
-  const [skillIds, setSkillIds] = useState<number[]>([]);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
@@ -39,13 +35,7 @@ export default function UsersPage() {
     }
   }, [roleFilter, activeFilter]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/filter change
-    void load();
-  }, [load]);
-  useEffect(() => {
-    fetchSkills().then(setSkills).catch(() => setSkills([]));
-  }, []);
+ 
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -57,13 +47,9 @@ export default function UsersPage() {
       full_name: form.full_name,
       role: form.role,
     };
-    if (form.role === 'technician') {
-      input.technician = { shift_start: form.shift_start, shift_end: form.shift_end, skill_ids: skillIds };
-    }
     try {
       await createUser(input);
       setForm(EMPTY);
-      setSkillIds([]);
       await load();
     } catch (err) {
       setFormErrors(err instanceof ApiError ? { ...err.fieldErrors, _: err.message } : { _: 'Could not reach the server.' });
@@ -143,36 +129,14 @@ export default function UsersPage() {
         <label className={ui.label}>
           Role
           <select className={ui.input} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            {(Object.keys(ROLE_LABEL) as Role[]).filter((r) => r !== 'technician').map((r) => (
               <option key={r} value={r}>{ROLE_LABEL[r]}</option>
             ))}
           </select>
           {err('role')}
         </label>
 
-        {form.role === 'technician' && (
-          <fieldset className="grid gap-3 rounded-md border border-slate-200 p-4">
-            <legend className="px-1 text-sm font-medium">Technician</legend>
-            <label className={ui.label}>Shift start<input className={ui.input} type="time" value={form.shift_start} onChange={(e) => setForm({ ...form, shift_start: e.target.value })} required /></label>
-            <label className={ui.label}>Shift end<input className={ui.input} type="time" value={form.shift_end} onChange={(e) => setForm({ ...form, shift_end: e.target.value })} required /></label>
-            {err('technician')}
-            <div className="flex flex-wrap gap-2">
-              {skills.map((s) => (
-                <label key={s.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={skillIds.includes(s.id)}
-                    onChange={(e) =>
-                      setSkillIds(e.target.checked ? [...skillIds, s.id] : skillIds.filter((x) => x !== s.id))
-                    }
-                  />
-                  {s.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-
+        
         {formErrors._ && !Object.keys(formErrors).some((k) => k !== '_') && <p role="alert" className={ui.error}>{formErrors._}</p>}
         <button className={ui.btn} disabled={busy}>{busy ? 'Adding…' : 'Add member'}</button>
       </form>

@@ -6,6 +6,8 @@ import type {
   Page,
   RegisterInput,
   User,
+  Technician,
+  TechnicianUpdate,
 } from './models';
 
 export type Skill = components['schemas']['Skill'];
@@ -44,3 +46,8 @@ export const updateOrganization = (
     version: number;
   },
 ) => patch<Organization>('/organization/', input);
+
+// --- technicians ---
+export const fetchTechnicians = () => get<Technician[]>('/technicians/');
+export const updateTechnician = (id: number, input: TechnicianUpdate) =>
+  patch<Technician>(`/technicians/${id}/`, input);
