@@ -64,13 +64,13 @@ def test_head_edits_shift_phone_and_skills(head_a, technician_a):
         {
             "shift_start": "07:00",
             "shift_end": "15:30",
-            "phone": "0801",
+            "phone": "555-123-4567",
             "skill_ids": [skill.pk],
         },
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["phone"] == "0801"
+    assert body["phone"] == "555-123-4567"
     assert [s["id"] for s in body["skills"]] == [skill.pk]
     tech.refresh_from_db()
     assert tech.shift_end == datetime.time(15, 30)
@@ -123,3 +123,31 @@ def test_post_and_delete_are_not_allowed(head_a, technician_a):
     assert (
         c.delete(f"/api/technicians/{profile_of(technician_a).pk}/").status_code == 405
     )
+
+
+@pytest.mark.parametrize("phone", ["call me", "08O1234567", "12", "555-123-4567 ext 9"])
+def test_phone_with_letters_or_wrong_length_is_rejected(head_a, technician_a, phone):
+    tech = profile_of(technician_a)
+    assert patch(head_a, tech, {"phone": phone}).status_code == 400
+    tech.refresh_from_db()
+    assert tech.phone != phone
+
+
+@pytest.mark.parametrize("phone", ["+1 (555) 123-4567", "555-123-4567", "5551234567"])
+def test_normal_us_phone_formats_are_accepted(head_a, technician_a, phone):
+    assert patch(head_a, profile_of(technician_a), {"phone": phone}).status_code == 200
+
+
+def test_phone_can_be_cleared(head_a, technician_a):
+    tech = profile_of(technician_a)
+    assert patch(head_a, tech, {"phone": None}).status_code == 200
+
+
+def test_skills_cannot_be_cleared_but_may_be_left_alone(head_a, technician_a):
+    tech = profile_of(technician_a)
+    tech.skills.set([Skill.objects.first()])
+    response = patch(head_a, tech, {"skill_ids": []})
+    assert response.status_code == 400
+    assert response.json()["skill_ids"] == ["Select at least one skill."]
+    assert tech.skills.count() == 1
+    assert patch(head_a, tech, {"phone": "555-123-4567"}).status_code == 200

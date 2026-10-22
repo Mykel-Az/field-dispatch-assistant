@@ -32,6 +32,10 @@ export default function TechnicianForm({ technician, onDone, onCancel }: Props) 
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (skillIds.length === 0) {
+      setErrors({ skill_ids: 'Select at least one skill.' });
+      return;
+    }
     setBusy(true);
     setErrors({});
     try {
@@ -111,7 +115,16 @@ export default function TechnicianForm({ technician, onDone, onCancel }: Props) 
       {editing && (
         <label className={ui.label}>
           Phone
-          <input className={ui.input} value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />
+           <input
+            className={ui.input}
+            type="tel"
+            inputMode="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            maxLength={20}
+            pattern="\+?[0-9\s().\-]{7,20}"
+            title="Digits, spaces, + ( ) - . only, e.g. +1 (555) 123-4567"
+           />
           {fieldError('phone')}
         </label>
       )}
@@ -133,7 +146,6 @@ export default function TechnicianForm({ technician, onDone, onCancel }: Props) 
           ))}
         </div>
         {fieldError('skill_ids')}
-        {fieldError('technician')}
       </fieldset>
 
       {showSummary && <p role="alert" className={ui.error}>{errors._}</p>}

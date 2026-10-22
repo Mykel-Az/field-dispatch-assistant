@@ -89,7 +89,11 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class TechnicianInputSerializer(serializers.Serializer):
     skill_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Skill.objects.all(), many=True, source="skills", required=False
+        queryset=Skill.objects.all(),
+        many=True,
+        source="skills",
+        allow_empty=False,
+        error_messages={"empty": "Select at least one skill."},
     )
     shift_start = serializers.TimeField()
     shift_end = serializers.TimeField()
@@ -127,7 +131,12 @@ class TechnicianUpdateSerializer(serializers.ModelSerializer):
     """PATCH /technicians/{id}/. No user, organization or coordinates here."""
 
     skill_ids = serializers.PrimaryKeyRelatedField(
-        queryset=Skill.objects.all(), many=True, source="skills", required=False
+        queryset=Skill.objects.all(),
+        many=True,
+        source="skills",
+        required=False,
+        allow_empty=False,
+        error_messages={"empty": "Select at least one skill."},
     )
 
     class Meta:

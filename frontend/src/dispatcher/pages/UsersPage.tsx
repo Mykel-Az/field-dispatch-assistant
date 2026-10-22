@@ -35,7 +35,12 @@ export default function UsersPage() {
     }
   }, [roleFilter, activeFilter]);
 
- 
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch on mount/filter change
+    void load();
+  }, [load]);
+  
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();

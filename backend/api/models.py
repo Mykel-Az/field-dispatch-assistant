@@ -1,10 +1,15 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models.functions import Lower
 
 from .manager import TenantQuerySet, TenantScopedModel
 
 # Create your models here.
+phone_validator = RegexValidator(
+    r"^\+?[0-9\s().-]{7,20}$",
+    "Enter a valid phone number (digits, spaces, + ( ) - . only).",
+)
 
 
 class CustomUserManager(BaseUserManager.from_queryset(TenantQuerySet)):
@@ -68,7 +73,9 @@ class Organization(AddressMixin, models.Model):
 
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True, default="")
-    phone = models.CharField(max_length=20, blank=True, default="")
+    phone = models.CharField(
+        max_length=20, blank=True, default="", validators=[phone_validator]
+    )
 
     work_start = models.TimeField(blank=True, null=True)
     work_end = models.TimeField(blank=True, null=True)
@@ -167,7 +174,9 @@ class Technician(TenantScopedModel):
     shift_start = models.TimeField()
     shift_end = models.TimeField()
 
-    phone = models.CharField(max_length=20, blank=True, null=True)
+    phone = models.CharField(
+        max_length=20, blank=True, null=True, validators=[phone_validator]
+    )
 
     def save(self, *args, **kwargs):
         # Invariant 25: a technician belongs to the same organization as its user.

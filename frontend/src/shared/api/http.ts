@@ -10,6 +10,23 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
+function flatten(
+  value: unknown,
+  out: Record<string, string> = {},
+  key = '',
+): Record<string, string> {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    if (first !== null && typeof first === 'object') flatten(first, out, key);
+    else if (key && first !== undefined && !(key in out)) out[key] = String(first);
+  } else if (value !== null && typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) flatten(v, out, k);
+  } else if (value !== null && value !== undefined && key && !(key in out)) {
+    out[key] = String(value);
+  }
+  return out;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -21,13 +38,8 @@ export class ApiError extends Error {
 
   /** Field errors as { field: "first message" }, for forms. */
   get fieldErrors(): Record<string, string> {
-    const out: Record<string, string> = {};
-    if (this.body && typeof this.body === 'object') {
-      for (const [key, value] of Object.entries(this.body)) {
-        if (key === 'detail') continue;
-        out[key] = Array.isArray(value) ? String(value[0]) : String(value);
-      }
-    }
+    const out = flatten(this.body);
+    delete out.detail;
     return out;
   }
 }
@@ -36,9 +48,8 @@ function messageFrom(body: unknown, status: number): string {
   if (body && typeof body === 'object') {
     const b = body as Record<string, unknown>;
     if (typeof b.detail === 'string') return b.detail;
-    if (Array.isArray(b.non_field_errors)) return String(b.non_field_errors[0]);
-    const first = Object.values(b)[0];
-    if (Array.isArray(first) && first.length) return String(first[0]);
+    const first = Object.values(flatten(body))[0];
+    if (first) return first;
   }
   return `Request failed (${status})`;
 }

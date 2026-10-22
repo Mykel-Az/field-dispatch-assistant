@@ -12,7 +12,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .mixins import TenantScopedViewMixin
-from .models import Organization, Skill, Technician
+from .models import GeocodeStatus, Organization, Skill, Technician
 from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
 from .serializers import (
     GENERIC_LOGIN_ERROR,
@@ -247,7 +247,7 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             serializer.instance = org
             data = serializer.validated_data
             if data.get("lat") is not None and data.get("lng") is not None:
-                data["geocode_status"] = Organization.GeocodeStatus.MANUAL
+                data["geocode_status"] = GeocodeStatus.MANUAL
             for field, value in data.items():
                 setattr(org, field, value)
             org.version += 1  # the client's version is replaced, not stored
