@@ -13,7 +13,9 @@ NEW_DISPATCHER = {
 }
 
 
-def technician_body(skill_ids=()):
+def technician_body(skill_ids=None):
+    if skill_ids is None:
+        skill_ids = [Skill.objects.first().pk]
     return {
         "email": "newtech@example.com",
         "password": PASSWORD,
@@ -103,6 +105,22 @@ def test_shift_end_must_be_after_shift_start(head_a):
     assert (
         client_for(head_a).post("/api/users/", body, format="json").status_code == 400
     )
+
+
+def test_technician_needs_at_least_one_skill(head_a):
+    body = technician_body()
+    body["technician"]["skill_ids"] = []
+    response = client_for(head_a).post("/api/users/", body, format="json")
+    assert response.status_code == 400
+    assert response.json()["technician"]["skill_ids"] == ["Select at least one skill."]
+    assert not CustomUser.objects.filter(email=body["email"]).exists()
+
+
+def test_technician_skill_ids_cannot_be_left_out(head_a):
+    body = technician_body()
+    del body["technician"]["skill_ids"]
+    response = client_for(head_a).post("/api/users/", body, format="json")
+    assert response.status_code == 400
 
 
 def test_failed_technician_create_leaves_no_user_behind(head_a):

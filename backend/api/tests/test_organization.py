@@ -90,3 +90,10 @@ def test_id_and_geocode_status_cannot_be_written(head_a, org_a):
     assert response.status_code == 200
     org_a.refresh_from_db()
     assert org_a.pk != 999 and org_a.geocode_status == "pending"
+
+
+def test_organization_phone_with_letters_is_rejected(head_a):
+    response = client_for(head_a).patch(
+        "/api/organization/", {"version": 1, "phone": "call us"}, format="json"
+    )
+    assert response.status_code == 400

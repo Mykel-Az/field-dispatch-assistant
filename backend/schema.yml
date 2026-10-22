@@ -21,6 +21,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ChangePassword'
         required: true
+      security:
+      - sessionAuth: []
       responses:
         '204':
           description: No response body
@@ -31,6 +33,7 @@ paths:
       tags:
       - auth
       security:
+      - sessionAuth: []
       - {}
       responses:
         '204':
@@ -53,6 +56,7 @@ paths:
               $ref: '#/components/schemas/Login'
         required: true
       security:
+      - sessionAuth: []
       - {}
       responses:
         '200':
@@ -66,6 +70,8 @@ paths:
       operationId: auth_logout_create
       tags:
       - auth
+      security:
+      - sessionAuth: []
       responses:
         '204':
           description: No response body
@@ -74,6 +80,8 @@ paths:
       operationId: auth_me_retrieve
       tags:
       - auth
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -99,6 +107,7 @@ paths:
               $ref: '#/components/schemas/Register'
         required: true
       security:
+      - sessionAuth: []
       - {}
       responses:
         '201':
@@ -114,6 +123,7 @@ paths:
       tags:
       - health
       security:
+      - sessionAuth: []
       - {}
       responses:
         '200':
@@ -129,6 +139,8 @@ paths:
         purpose.
       tags:
       - organization
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -153,6 +165,8 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedOrganization'
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -166,6 +180,8 @@ paths:
       description: API endpoint that allows skills to be viewed or created.
       tags:
       - skills
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -174,6 +190,77 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Skill'
+          description: ''
+  /api/technicians/:
+    get:
+      operationId: technicians_list
+      description: Dispatchers and heads read technicians; only heads edit them.
+      tags:
+      - technicians
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TechnicianDetail'
+          description: ''
+  /api/technicians/{id}/:
+    get:
+      operationId: technicians_retrieve
+      description: Dispatchers and heads read technicians; only heads edit them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this technician.
+        required: true
+      tags:
+      - technicians
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianDetail'
+          description: ''
+    patch:
+      operationId: technicians_partial_update
+      description: Dispatchers and heads read technicians; only heads edit them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this technician.
+        required: true
+      tags:
+      - technicians
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTechnicianUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTechnicianUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTechnicianUpdate'
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianDetail'
           description: ''
   /api/users/:
     get:
@@ -188,6 +275,8 @@ paths:
           type: integer
       tags:
       - users
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -212,6 +301,8 @@ paths:
             schema:
               $ref: '#/components/schemas/StaffCreate'
         required: true
+      security:
+      - sessionAuth: []
       responses:
         '201':
           content:
@@ -232,6 +323,8 @@ paths:
         required: true
       tags:
       - users
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -262,6 +355,8 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedUserUpdate'
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -282,6 +377,8 @@ paths:
         required: true
       tags:
       - users
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -302,6 +399,8 @@ paths:
         required: true
       tags:
       - users
+      security:
+      - sessionAuth: []
       responses:
         '200':
           content:
@@ -334,6 +433,8 @@ paths:
             schema:
               $ref: '#/components/schemas/SetPassword'
         required: true
+      security:
+      - sessionAuth: []
       responses:
         '204':
           description: No response body
@@ -354,14 +455,16 @@ components:
     GeocodeStatusEnum:
       enum:
       - pending
-      - manual
       - ok
+      - approximate
+      - manual
       - failed
       type: string
       description: |-
         * `pending` - Pending
-        * `manual` - Manual
         * `ok` - OK
+        * `approximate` - Approximate
+        * `manual` - Manual
         * `failed` - Failed
     Health:
       type: object
@@ -399,8 +502,12 @@ components:
           - type: string
             maxLength: 0
         phone:
-          type: string
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9\s().-]{7,20}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
         address:
           type: string
           maxLength: 255
@@ -494,8 +601,12 @@ components:
           - type: string
             maxLength: 0
         phone:
-          type: string
-          maxLength: 20
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9\s().-]{7,20}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
         address:
           type: string
           maxLength: 255
@@ -531,6 +642,29 @@ components:
         version:
           type: integer
           minimum: 1
+    PatchedTechnicianUpdate:
+      type: object
+      description: PATCH /technicians/{id}/. No user, organization or coordinates
+        here.
+      properties:
+        skill_ids:
+          type: array
+          items:
+            type: integer
+        shift_start:
+          type: string
+          format: time
+        shift_end:
+          type: string
+          format: time
+        phone:
+          nullable: true
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9\s().-]{7,20}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
     PatchedUserUpdate:
       type: object
       description: PATCH /users/{id}/ accepts full_name only; anything else is a 400.
@@ -619,6 +753,40 @@ components:
       - full_name
       - password
       - role
+    TechnicianDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/User'
+          readOnly: true
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
+          readOnly: true
+        shift_start:
+          type: string
+          format: time
+          readOnly: true
+        shift_end:
+          type: string
+          format: time
+          readOnly: true
+        phone:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - id
+      - phone
+      - shift_end
+      - shift_start
+      - skills
+      - user
     TechnicianInput:
       type: object
       properties:
@@ -635,6 +803,7 @@ components:
       required:
       - shift_end
       - shift_start
+      - skill_ids
     User:
       type: object
       properties:
@@ -670,3 +839,8 @@ components:
       - is_active
       - organization
       - role
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

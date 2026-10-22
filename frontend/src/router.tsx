@@ -5,6 +5,7 @@ import LoginPage from './auth/pages/LoginPage';
 import RegisterPage from './auth/pages/RegisterPage';
 import DashboardPage from './dispatcher/pages/home';
 import OrganizationPage from './dispatcher/pages/OrganizationPage';
+import TechniciansPage from './dispatcher/pages/TechniciansPage';
 import UsersPage from './dispatcher/pages/UsersPage';
 import AppLayout from './layout/AppLayout';
 import TechnicianHome from './technician/pages/TechnicianHome';
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
           { element: <RequireRole roles={['head_dispatcher', 'dispatcher']} />, children: [
             { path: '/dashboard', element: <DashboardPage /> },
             { path: '/organization', element: <OrganizationPage /> },
+            { path: '/technicians', element: <TechniciansPage /> },
           ] },
           { element: <RequireRole roles={['head_dispatcher']} />, children: [
             { path: '/users', element: <UsersPage /> },

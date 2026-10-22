@@ -12,7 +12,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .mixins import TenantScopedViewMixin
-from .models import Organization, Skill
+from .models import GeocodeStatus, Organization, Skill, Technician
 from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
 from .serializers import (
     GENERIC_LOGIN_ERROR,
@@ -24,6 +24,8 @@ from .serializers import (
     SetPasswordSerializer,
     SkillSerializer,
     StaffCreateSerializer,
+    TechnicianDetailSerializer,
+    TechnicianUpdateSerializer,
     UserSerializer,
     UserUpdateSerializer,
 )
@@ -232,7 +234,7 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user.organization
 
-    def perform_update(self, serializer):
+    def perform_update(self, serializer):  # race conditions
         with transaction.atomic():
             org = Organization.objects.select_for_update().get(
                 pk=serializer.instance.pk
@@ -245,11 +247,50 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             serializer.instance = org
             data = serializer.validated_data
             if data.get("lat") is not None and data.get("lng") is not None:
-                data["geocode_status"] = Organization.GeocodeStatus.MANUAL
+                data["geocode_status"] = GeocodeStatus.MANUAL
             for field, value in data.items():
                 setattr(org, field, value)
             org.version += 1  # the client's version is replaced, not stored
             org.save()
+
+
+class TechnicianViewSet(
+    TenantScopedViewMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Dispatchers and heads read technicians; only heads edit them."""
+
+    queryset = (
+        Technician.objects.select_related("user__organization")
+        .prefetch_related("skills")
+        .order_by("user__full_name", "id")
+    )
+    permission_classes = [IsDispatcher]
+    serializer_class = TechnicianDetailSerializer
+    pagination_class = None
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_permissions(self):
+        if self.action == "partial_update":
+            return [IsHeadDispatcher()]
+        return super().get_permissions()
+
+    def get_serializer_class(self):
+        if self.action == "partial_update":
+            return TechnicianUpdateSerializer
+        return TechnicianDetailSerializer
+
+    @extend_schema(
+        request=TechnicianUpdateSerializer, responses=TechnicianDetailSerializer
+    )
+    def partial_update(self, request, *args, **kwargs):
+        technician = self.get_object()  # scoped queryset: another org's id -> 404
+        serializer = self.get_serializer(technician, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(TechnicianDetailSerializer(technician).data)
 
 
 class SkillViewSet(generics.ListAPIView):

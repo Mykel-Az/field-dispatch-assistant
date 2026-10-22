@@ -153,6 +153,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/technicians/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Dispatchers and heads read technicians; only heads edit them. */
+        get: operations["technicians_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/technicians/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Dispatchers and heads read technicians; only heads edit them. */
+        get: operations["technicians_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Dispatchers and heads read technicians; only heads edit them. */
+        patch: operations["technicians_partial_update"];
+        trace?: never;
+    };
     "/api/users/": {
         parameters: {
             query?: never;
@@ -250,12 +285,13 @@ export interface components {
         };
         /**
          * @description * `pending` - Pending
-         *     * `manual` - Manual
          *     * `ok` - OK
+         *     * `approximate` - Approximate
+         *     * `manual` - Manual
          *     * `failed` - Failed
          * @enum {string}
          */
-        GeocodeStatusEnum: "pending" | "manual" | "ok" | "failed";
+        GeocodeStatusEnum: "pending" | "ok" | "approximate" | "manual" | "failed";
         Health: {
             status: string;
         };
@@ -321,6 +357,15 @@ export interface components {
             readonly is_configured?: boolean;
             version?: number;
         };
+        /** @description PATCH /technicians/{id}/. No user, organization or coordinates here. */
+        PatchedTechnicianUpdate: {
+            skill_ids?: number[];
+            /** Format: time */
+            shift_start?: string;
+            /** Format: time */
+            shift_end?: string;
+            phone?: (string) | null;
+        };
         /** @description PATCH /users/{id}/ accepts full_name only; anything else is a 400. */
         PatchedUserUpdate: {
             full_name?: string;
@@ -361,8 +406,18 @@ export interface components {
             role: components["schemas"]["RoleEnum"];
             technician?: components["schemas"]["TechnicianInput"];
         };
+        TechnicianDetail: {
+            readonly id: number;
+            readonly user: components["schemas"]["User"];
+            readonly skills: components["schemas"]["Skill"][];
+            /** Format: time */
+            readonly shift_start: string;
+            /** Format: time */
+            readonly shift_end: string;
+            readonly phone: string | null;
+        };
         TechnicianInput: {
-            skill_ids?: number[];
+            skill_ids: number[];
             /** Format: time */
             shift_start: string;
             /** Format: time */
@@ -600,6 +655,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Skill"][];
+                };
+            };
+        };
+    };
+    technicians_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianDetail"][];
+                };
+            };
+        };
+    };
+    technicians_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this technician. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianDetail"];
+                };
+            };
+        };
+    };
+    technicians_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this technician. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedTechnicianUpdate"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedTechnicianUpdate"];
+                "multipart/form-data": components["schemas"]["PatchedTechnicianUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianDetail"];
                 };
             };
         };

@@ -13,6 +13,29 @@ export interface User {
   organization: { id: number; name: string };
 }
 
+export interface SkillRef {
+  id: number;
+  name: string;
+  description?: string | null;
+}
+
+/** GET /technicians/ and /technicians/{id}/ (no coordinates, by design). */
+export interface Technician {
+  id: number;
+  user: User;
+  skills: SkillRef[];
+  shift_start: string; // "HH:MM:SS"
+  shift_end: string;
+  phone: string | null;
+}
+
+export interface TechnicianUpdate {
+  skill_ids?: number[];
+  shift_start?: string;
+  shift_end?: string;
+  phone?: string | null;
+}
+
 export interface Page<T> {
   count: number;
   next: string | null;

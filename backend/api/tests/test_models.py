@@ -82,9 +82,23 @@ def test_for_organization_filters_users(org_a, org_b, head_a, head_b):
     assert list(CustomUser.objects.for_organization(org_b)) == [head_b]
 
 
-def test_organization_is_configured_needs_workstation_and_hours(db):
+@pytest.mark.parametrize(
+    ("lat", "lng", "status", "work_end", "expected"),
+    [
+        (6.5, 3.4, "ok", datetime.time(17), True),
+        (6.5, 3.4, "manual", datetime.time(17), True),
+        (6.5, None, "pending", datetime.time(17), False),  # lat without lng
+        (6.5, None, "ok", datetime.time(17), False),  # status ok but no lng
+        (6.5, 3.4, "pending", datetime.time(17), False),  # not located yet
+        (6.5, 3.4, "failed", datetime.time(17), False),
+        (6.5, 3.4, "ok", None, False),  # no closing time
+    ],
+)
+def test_organization_is_configured_needs_a_location_and_working_hours(
+    db, lat, lng, status, work_end, expected
+):
     org = Organization.objects.create(name="X")
-    assert org.is_configured is False
-    org.lat, org.lng = 6.5, 3.4
-    org.work_start, org.work_end = datetime.time(8), datetime.time(17)
-    assert org.is_configured is True
+    assert org.is_configured is False  # a brand-new organization
+    org.lat, org.lng, org.geocode_status = lat, lng, status
+    org.work_start, org.work_end = datetime.time(8), work_end
+    assert org.is_configured is expected
