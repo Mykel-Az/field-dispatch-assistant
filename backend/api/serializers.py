@@ -2,7 +2,7 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Organization, Skill, Technician
+from .models import Job, JobStatusHistory, Organization, Skill, Technician
 from .services.accounts import register_organization
 
 User = get_user_model()
@@ -241,3 +241,54 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 class HealthSerializer(serializers.Serializer):
     status = serializers.CharField()
+
+
+class JobSerializer(serializers.ModelSerializer):
+    technician = TechnicianDetailSerializer()
+
+    class Meta:
+        models = Job
+        fields = [
+            "id",
+            "title",
+            "customer_name",
+            "address",
+            "postal_code",
+            "category",
+            "is_urgent",
+            "status",
+            "technician{id, full_name}",
+            "scheduled_date",
+            "slot_start",
+            "slot_end",
+            "geocode_status",
+            "location_label",
+        ]
+
+
+class JobHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        models = JobStatusHistory
+        fields = ["__all__"]
+
+
+class JobDetailSerializer(serializers.ModelSerializer):
+    job = JobSerializer()
+    history = JobHistorySerializer()
+    acceptable_skills = SkillSerializer()
+
+    class Meta:
+        models = Job
+        fields = [
+            "job",
+            "description",
+            "customer_phone",
+            "acceptable_skills[{id, name}]",
+            "version",
+            "created_at",
+            "history",
+        ]
+
+
+class JobCreateSerializer(serializers.Serializer):
+    pass
