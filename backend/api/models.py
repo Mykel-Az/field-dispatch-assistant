@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower
+
+from dispatch_engine import lifecycle as lc
 
 from .manager import TenantQuerySet, TenantScopedModel
 
@@ -200,45 +203,63 @@ class Skill(models.Model):
         return self.name
 
 
+class JobCategory(models.TextChoices):
+    HVAC = "hvac", "HVAC"
+    ELECTRICAL = "electrical", "Electrical"
+    APPLIANCE = "appliance", "Appliance repair"
+
+
+class JobStatus(models.TextChoices):
+    UNASSIGNED = lc.UNASSIGNED, "Unassigned"
+    ASSIGNED = lc.ASSIGNED, "Assigned"
+    ONGOING = lc.ONGOING, "Ongoing"
+    COMPLETED = lc.COMPLETED, "Completed"
+    INCOMPLETE = lc.INCOMPLETE, "Incomplete"
+    FAILED = lc.FAILED, "Failed"
+    CANCELED = lc.CANCELED, "Canceled"
+
+
+class CandidateSkillRule(models.Model):  # global, like Skill
+    category = models.CharField(max_length=20, choices=JobCategory.choices)
+    skill = models.ForeignKey(
+        "Skill", on_delete=models.PROTECT, related_name="category_rules"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["category", "skill"], name="unique_category_skill"
+            )
+        ]
+
+
 class Job(AddressMixin, TenantScopedModel):
-    class Status(models.TextChoices):
-        UNASSINGED = "unassigned", "Unassigned"
-        ASSIGNED = "assigned", "Assigned"
-        ONGOING = "ongoing", "Ongoing"
-        COMPLETED = "completed", "completed"
-        INCOMPLETE = "incomplete", "Incompleted"
-        FAILED = "failed", " Failed"
-        CANCELLED = "canceled", "Cancelled"
-
-    class Categories(models.TextChoices):
-        HVAC = "hvac", "Hvac"
-        ELECTRICAL = "electrical", "Electrical"
-        APPLIANCE = "appliance", "Appliance"
-
     title = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     customer_name = models.CharField(max_length=50)
     customer_phone = models.CharField(
         max_length=20, blank=True, null=True, validators=[phone_validator]
     )
-
-    category = models.TextChoices(max_length=30, choice=Categories.choices)
+    category = models.TextChoices(max_length=20, choice=JobCategory.choices)
     is_urgent = models.BooleanField(default=False)
     status = models.CharField(
-        max_length=20, choices=Status.choices, default=Status.UNASSINGED
+        max_length=20, choices=JobStatus.choices, default=JobStatus.UNASSIGNED
     )
     technician = models.ForeignKey(
         Technician, on_delete=models.PROTECT, related_name="Jobs", blank=True, null=True
     )
 
-    acceptable_skils = models.ManyToManyField(Skill)
-    scheduled_date = models.DateTimeField(null=True, blank=True)
+    acceptable_skills = models.ManyToManyField("Skill", related_name="jobs")
+    estimated_duration_minutes = models.PositiveSmallIntegerField(default=60)
+    scheduled_date = models.DateField(null=True, blank=True)
     slot_start = models.DateTimeField(null=True, blank=True)
     slot_end = models.DateTimeField(null=True, blank=True)
-    sequence_position = models.PositiveIntegerField(null=True, blank=True)
+    sequence_position = models.PositiveSmallIntegerField(null=True, blank=True)
     estimated_arrival = models.DateTimeField(null=True, blank=True)
+    arrived_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
     version = models.PositiveIntegerField(default=1)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -286,23 +307,31 @@ class Job(AddressMixin, TenantScopedModel):
         ]
 
     def save(self, *args, **kwargs):
-        # Invariant 25: a technician belongs to the same organization as its user.
-        if self.technician.organization_id != self.organization_id:
-            raise ValueError("technician organization must equal its user's")
+        if (
+            self.technician_id
+            and not type(self.technician)
+            ._base_manager.filter(
+                pk=self.technician_id, organization_id=self.organization_id
+            )
+            .exists()
+        ):
+            raise ValueError(
+                "technician belongs to another organization"
+            )  # match Technician.save()
         super().save(*args, **kwargs)
-
-    def __str__(self) -> str:
-        return f"{self.title} ({self.status} - {self.technician})"
 
 
 class JobStatusHistory(TenantScopedModel):
-    job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="job_history")
-    from_status = models.CharField(blank=True)
-    to_status = models.CharField()
-    changed_by = models.ForeignKey(
-        CustomUser, on_delete=models.PROTECT, related_name="job_history"
+    job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="history")
+    from_status = models.CharField(max_length=20, blank=True)
+    to_status = models.CharField(max_length=20, choices=JobStatus.choices)
+    technician = models.ForeignKey(
+        "Technician", null=True, blank=True, on_delete=models.PROTECT
     )
-    reason = models.TextField(max_length=500)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, blank=True, null=True
+    )
+    reason = models.TextField(blank=True)
     created_At = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -312,13 +341,3 @@ class JobStatusHistory(TenantScopedModel):
 
     def delete(self, *args, **kwargs):
         raise ValueError("history rows are append-only")
-
-
-class CandidateSkillRule(models.Model):
-    category = models.CharField(max_length=30)
-    skill = models.ForeignKey(
-        Skill, on_delete=models.CASCADE, related_name="candidate_skill_rule"
-    )
-
-    class Meta:
-        constrainst = [models.UniqueConstraint(fields=["category", "skill"])]

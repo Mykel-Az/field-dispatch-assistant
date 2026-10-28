@@ -1,60 +1,82 @@
-class TaskLifecycleModel:
-    def __init__(self, transitions: dict[str, set[str]], terminal_states: set[str]):
-        self.transitions: dict[str, set[str]] = transitions
-        self.terminal_states: set[str] = terminal_states
+"""Job lifecycle rules. Pure: no Django, no DB, satisfies lint-imports."""
 
-    def get_next_states(self, current_state: str) -> set[str]:
+# 1. Explicit String Constants for models.py mapping
+UNASSIGNED = "unassigned"
+ASSIGNED = "assigned"
+ONGOING = "ongoing"
+INCOMPLETE = "incomplete"
+COMPLETED = "completed"
+FAILED = "failed"
+CANCELED = "canceled"
+
+# 2. Immutable Transition Definition Maps
+TRANSITIONS: dict[str, frozenset[str]] = {
+    UNASSIGNED: frozenset({ASSIGNED, CANCELED}),
+    ASSIGNED: frozenset({UNASSIGNED, ONGOING, CANCELED}),
+    ONGOING: frozenset({COMPLETED, INCOMPLETE, FAILED}),
+    INCOMPLETE: frozenset({UNASSIGNED}),
+    COMPLETED: frozenset(),
+    FAILED: frozenset(),
+    CANCELED: frozenset(),
+}
+
+TERMINAL = frozenset(
+    state for state, next_states in TRANSITIONS.items() if not next_states
+)
+REASON_REQUIRED = frozenset({INCOMPLETE, FAILED, CANCELED})
+
+
+# 3. Custom Structural Exceptions
+class IllegalTransition(Exception):
+    """Raised when a status shift violates the lifecycle matrix rules."""
+
+    def __init__(self, src: str, dst: str):
+        super().__init__(
+            f"Illegal state transition sequence: '{src}' cannot move to '{dst}'."
+        )
+        self.src, self.dst = src, dst
+
+
+# 4. Engine Utilities & Validation Engine (The Best of Version 1)
+class JobLifecycleEngine:
+    """Combines Version 1's validation/printing with Version 2's immutability."""
+
+    @staticmethod
+    def get_next_states(current_state: str) -> frozenset[str]:
         """Returns the set of next valid states from the current state."""
-        return self.transitions.get(current_state, set())
+        return TRANSITIONS.get(current_state, frozenset())
 
-    def is_terminal(self, state: str) -> bool:
-        """Checks if a state has no further transitions."""
-        return state in self.terminal_states
+    @staticmethod
+    def is_terminal(state: str) -> bool:
+        """Checks if a state has no further outbound transitions."""
+        return state in TERMINAL
 
-    def print_transition_table(self):
-        """Prints a scannable text-based transition table."""
-        # Get all unique states to display comprehensive rows
-        all_states = sorted(list(self.transitions.keys()) + list(self.terminal_states))
+    @staticmethod
+    def can_transition(src: str, dst: str) -> bool:
+        """Boolean check for evaluating state movements."""
+        return dst in TRANSITIONS.get(src, frozenset())
 
-        print(f"{'Current State':<15} | {'Valid Next States':<30} | Status")
-        print("-" * 60)
+    @staticmethod
+    def check_transition(src: str, dst: str) -> None:
+        """Enforces a hard state rule change or raises an Exception."""
+        if not JobLifecycleEngine.can_transition(src, dst):
+            raise IllegalTransition(src, dst)
 
+    @classmethod
+    def print_transition_table(cls):
+        """Generates a scannable text-based transition table for documentation."""
+        all_states = sorted(TRANSITIONS.keys())
+        print(f"\n{'Current State':<15} | {'Valid Next States':<35} | Status")
+        print("-" * 70)
         for state in all_states:
-            next_states = self.transitions.get(state, set())
-
-            # Format the next states set nicely
-            if next_states:
-                next_states_str = f"{{{', '.join(sorted(next_states))}}}"
-            else:
-                next_states_str = "{}"
-
-            status = "Terminal" if self.is_terminal(state) else "Active"
-            print(f"{state:<15} | {next_states_str:<30} | {status}")
+            next_states = TRANSITIONS.get(state, frozenset())
+            next_states_str = (
+                f"{{{', '.join(sorted(next_states))}}}" if next_states else "{}"
+            )
+            status = "Terminal" if cls.is_terminal(state) else "Active"
+            print(f"{state:<15} | {next_states_str:<35} | {status}")
 
 
-# --- Initialize the Model with Your Rules ---
 if __name__ == "__main__":
-    # The transition configuration adhering strictly to dict[str, set[str]]
-    lifecycle_transitions: dict[str, set[str]] = {
-        "unassigned": {"assigned", "canceled"},
-        "assigned": {"unassigned", "ongoing", "canceled"},
-        "ongoing": {"completed", "incomplete", "failed"},
-        "incomplete": {"unassigned"},  # Back to queue
-    }
-
-    # Explicitly tracking terminal states (they map to an empty set automatically)
-    terminal_states: set[str] = {"completed", "failed", "canceled"}
-
-    # Create the model instance
-    model = TaskLifecycleModel(lifecycle_transitions, terminal_states)
-
-    # Print the resulting lifecycle table
     print("--- TASK LIFECYCLE TRANSITION TABLE ---")
-    model.print_transition_table()
-
-    # Example Validation check
-    print("\n--- STATE CHECK EXAMPLES ---")
-    print(
-        f"Can 'ongoing' transition to 'completed'? {'completed' in model.get_next_states('ongoing')}"
-    )
-    print(f"Is 'failed' a terminal state? {model.is_terminal('failed')}")
+    JobLifecycleEngine.print_transition_table()
