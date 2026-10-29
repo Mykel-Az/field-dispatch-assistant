@@ -1,111 +1,49 @@
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
+"""Every endpoint that takes an object id must answer 404 for another organization.
 
-from .models import (
-    CandidateSkillRule,
-    CustomUser,
-    Job,
-    JobStatusHistory,
-    Organization,
-    Skill,
-)
+When you add a tenant model (Job, Technician...) and its endpoint, this test fails
+until you register how to create an org-A object for it below. That is the point.
+"""
 
-# Register your models here.
+import pytest
+
+from api.models import Technician
+
+from .conftest import api_endpoints, client_for, make_job
+
+# path template -> function(org_a_user) returning an id owned by organization A
+OBJECT_ID_FOR = {
+    "/api/users/{pk}/": lambda owner: owner.pk,
+    "/api/users/{pk}/deactivate/": lambda owner: owner.pk,
+    "/api/users/{pk}/reactivate/": lambda owner: owner.pk,
+    "/api/users/{pk}/set-password/": lambda owner: owner.pk,
+    "/api/technicians/{pk}/": lambda owner: (
+        Technician.objects.get(organization=owner.organization).pk
+    ),
+    "/api/jobs/{pk}/": lambda owner: make_job(owner.organization).pk,
+    "/api/jobs/{pk}/cancel/": lambda owner: make_job(owner.organization).pk,
+}
+UNSAFE_BODY = {"full_name": "x", "new_password": "An0ther-long-phrase!"}
 
 
-class CustomUserAdmin(UserAdmin):
-    model = CustomUser
-    list_display = [
-        "email",
-        "full_name",
-        "organization",
-        "role",
-        "is_staff",
-        "is_active",
+def endpoints_with_an_id():
+    return [
+        (method, path)
+        for path, method, _ in api_endpoints()
+        if "{pk}" in path and method in {"GET", "PATCH", "POST", "PUT", "DELETE"}
     ]
-    list_filter = ["role", "is_staff", "is_active"]
-    fieldsets = (
-        (None, {"fields": ("email", "password")}),
-        ("Personal info", {"fields": ("full_name",)}),
-        (
-            "Access",
-            {
-                "fields": (
-                    "role",
-                    "organization",
-                    "is_staff",
-                    "is_superuser",
-                    "is_active",
-                )
-            },
-        ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+
+
+def test_every_id_endpoint_is_registered_for_the_isolation_test():
+    assert endpoints_with_an_id(), "found no {pk} endpoints: the enumeration is broken"
+    missing = {path for _, path in endpoints_with_an_id()} - set(OBJECT_ID_FOR)
+    assert missing == set(), f"register these in OBJECT_ID_FOR: {sorted(missing)}"
+
+
+@pytest.mark.parametrize(("method", "path"), endpoints_with_an_id())
+def test_other_organization_gets_404(method, path, dispatcher_a, technician_a, head_b):
+    object_id = OBJECT_ID_FOR[path](dispatcher_a)
+    # Head B has the right ROLE, so only tenancy can be the reason for the 404.
+    response = getattr(client_for(head_b), method.lower())(
+        path.format(pk=object_id), UNSAFE_BODY, format="json"
     )
-    add_fieldsets = (
-        (
-            None,
-            {
-                "classes": ("wide",),
-                "fields": (
-                    "email",
-                    "full_name",
-                    "role",
-                    "organization",
-                    "password1",
-                    "password2",
-                    "is_staff",
-                    "is_active",
-                ),
-            },
-        ),
-    )
-    search_fields = ["email", "full_name"]
-    ordering = ["date_joined"]
-
-    def get_readonly_fields(self, request, obj=None):
-        # Invariant 21: role and organization are fixed once the user exists.
-        return ("role", "organization") if obj else ()
-
-
-admin.site.register(CustomUser, CustomUserAdmin)
-
-
-class OrganizationAdmin(admin.ModelAdmin):
-    model = Organization
-    list_display = ["name", "email", "phone", "is_active", "created_at"]
-    search_fields = ["name", "email"]
-    list_filter = ["is_active"]
-
-
-admin.site.register(Organization, OrganizationAdmin)
-
-admin.site.register(Skill)
-
-
-class ReadOnlyAdmin(admin.ModelAdmin):
-    """Jobs change through services (status rules, history), never by hand."""
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return False
-
-
-@admin.register(Job)
-class JobAdmin(ReadOnlyAdmin):
-    list_display = ["title", "organization", "status", "technician", "scheduled_date"]
-    list_filter = ["status", "category"]
-    search_fields = ["title", "customer_name"]
-
-
-@admin.register(JobStatusHistory)
-class JobStatusHistoryAdmin(ReadOnlyAdmin):
-    list_display = ["job", "from_status", "to_status", "changed_by", "created_at"]
-    list_filter = ["to_status"]
-
-
-admin.site.register(CandidateSkillRule)
+    assert response.status_code == 404

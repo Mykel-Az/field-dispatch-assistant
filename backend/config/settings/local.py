@@ -9,3 +9,5 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+GEOCODER_CLASS = os.getenv("GEOCODER_CLASS", "geocoding.fake.FakeGeocoder")
