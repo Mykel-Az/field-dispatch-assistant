@@ -1,3 +1,5 @@
+import type { components } from './schema';
+
 // Hand-written API shapes for the auth/users/organization endpoints.
 // TIME: these mirror backend/schema.yml by hand. Full-fidelity path: derive
 // them from the generated schema.d.ts (`npm run api:types`).
@@ -78,4 +80,35 @@ export const ROLE_LABEL: Record<Role, string> = {
   head_dispatcher: 'Head dispatcher',
   dispatcher: 'Dispatcher',
   technician: 'Technician',
+};
+
+// --- jobs: derived from the generated schema (`npm run api:types`) ---
+export type JobRow = components['schemas']['Job'];
+export type JobDetail = components['schemas']['JobDetail'];
+export type JobHistoryRow = components['schemas']['JobHistory'];
+export type JobCreateInput = components['schemas']['JobCreate'];
+export type JobUpdateInput = components['schemas']['PatchedJobUpdate'] & { version: number };
+export type JobCategory = components['schemas']['CategoryEnum'];
+export type GeocodeStatus = components['schemas']['GeocodeStatusEnum'];
+
+export const CATEGORY_LABEL: Record<JobCategory, string> = {
+  hvac: 'HVAC',
+  electrical: 'Electrical',
+  appliance: 'Appliance repair',
+};
+
+// TIME: category -> default skill NAME, mirroring the CandidateSkillRule seed.
+// Full-fidelity path: the API returns each category's default skill ids, so the
+// form can never drift from the table.
+export const CATEGORY_DEFAULT_SKILL: Record<JobCategory, string> = {
+  hvac: 'HVAC',
+  electrical: 'Electrical',
+  appliance: 'Appliance Repair',
+};
+
+// TIME: starting estimate per category until the algorithm learns real durations.
+export const CATEGORY_DEFAULT_MINUTES: Record<JobCategory, number> = {
+  hvac: 120,
+  electrical: 90,
+  appliance: 60,
 };

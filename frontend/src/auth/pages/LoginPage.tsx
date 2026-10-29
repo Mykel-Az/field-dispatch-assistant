@@ -45,7 +45,7 @@ export default function LoginPage() {
         <button className={ui.btn} disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
       </form>
       <p className="mt-4 text-sm">
-        New company? <Link className="text-blue-600 hover:underline" to="/register">Create an organization</Link>
+        New company? <Link className="text-brand hover:underline" to="/register">Create an organization</Link>
       </p>
     </main>
   );

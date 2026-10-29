@@ -105,11 +105,11 @@ export default function UsersPage() {
 
       <table className="my-4 w-full border-collapse text-left text-sm">
         <thead>
-          <tr className="border-b border-slate-200 text-slate-500"><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Role</th><th className="p-2">Status</th><th /></tr>
+          <tr className="border-b border-line text-ink-muted"><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Role</th><th className="p-2">Status</th><th /></tr>
         </thead>
         <tbody>
           {users.map((u) => (
-            <tr key={u.id} className={`border-b border-slate-100 ${u.is_active ? '' : 'text-slate-400'}`}>
+            <tr key={u.id} className={`border-b border-line ${u.is_active ? '' : 'text-ink-muted'}`}>
               <td className="p-2">{u.full_name}</td>
               <td className="p-2">{u.email}</td>
               <td className="p-2">{ROLE_LABEL[u.role]}</td>

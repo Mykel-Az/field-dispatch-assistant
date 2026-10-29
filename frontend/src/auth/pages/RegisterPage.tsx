@@ -50,7 +50,7 @@ export default function RegisterPage() {
         <button className={ui.btn} disabled={busy}>{busy ? 'Creating…' : 'Create organization'}</button>
       </form>
       <p className="mt-4 text-sm">
-        Already registered? <Link className="text-blue-600 hover:underline" to="/login">Sign in</Link>
+        Already registered? <Link className="text-brand hover:underline" to="/login">Sign in</Link>
       </p>
     </main>
   );

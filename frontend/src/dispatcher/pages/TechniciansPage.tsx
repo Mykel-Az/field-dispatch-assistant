@@ -75,7 +75,7 @@ export default function TechniciansPage() {
       {technicians && technicians.length > 0 && (
         <table className="w-full border-collapse text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
+            <tr className="border-b border-line text-ink-muted">
               <th className="p-2">Name</th>
               <th className="p-2">Shift</th>
               <th className="p-2">Skills</th>
@@ -86,19 +86,19 @@ export default function TechniciansPage() {
           </thead>
           <tbody>
             {technicians.map((t) => (
-              <tr key={t.id} className={`border-b border-slate-100 ${t.user.is_active ? '' : 'text-slate-400'}`}>
+              <tr key={t.id} className={`border-b border-line ${t.user.is_active ? '' : 'text-ink-muted'}`}>
                 <td className="p-2">
                   <div className="font-medium">{t.user.full_name}</div>
-                  <div className="text-xs text-slate-500">{t.user.email}</div>
+                  <div className="text-xs text-ink-muted">{t.user.email}</div>
                 </td>
                 <td className="p-2 whitespace-nowrap">{hhmm(t.shift_start)}–{hhmm(t.shift_end)}</td>
                 <td className="p-2">
                   {t.skills.length === 0 ? (
-                    <span className="text-slate-400">none</span>
+                    <span className="text-ink-muted">none</span>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {t.skills.map((s) => (
-                        <span key={s.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{s.name}</span>
+                        <span key={s.id} className="rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-ink">{s.name}</span>
                       ))}
                     </div>
                   )}

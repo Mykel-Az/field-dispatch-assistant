@@ -118,6 +118,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+         *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+         */
+        get: operations["jobs_list"];
+        put?: never;
+        /**
+         * @description Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+         *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+         */
+        post: operations["jobs_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+         *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+         */
+        get: operations["jobs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+         *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+         */
+        patch: operations["jobs_partial_update"];
+        trace?: never;
+    };
+    "/api/jobs/{id}/cancel/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+         *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+         */
+        post: operations["jobs_cancel_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/organization/": {
         parameters: {
             query?: never;
@@ -279,6 +347,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description * `hvac` - HVAC
+         *     * `electrical` - Electrical
+         *     * `appliance` - Appliance repair
+         * @enum {string}
+         */
+        CategoryEnum: "hvac" | "electrical" | "appliance";
         ChangePassword: {
             current_password: string;
             new_password: string;
@@ -294,6 +369,91 @@ export interface components {
         GeocodeStatusEnum: "pending" | "ok" | "approximate" | "manual" | "failed";
         Health: {
             status: string;
+        };
+        /** @description The list row. No lat/lng on purpose: nobody types or reads coordinates. */
+        Job: {
+            readonly id: number;
+            readonly title: string;
+            readonly customer_name: string;
+            readonly address: string;
+            readonly postal_code: string;
+            readonly category: components["schemas"]["CategoryEnum"];
+            readonly is_urgent: boolean;
+            /** @default unassigned */
+            readonly status: components["schemas"]["StatusEnum"];
+            readonly technician: components["schemas"]["JobTechnician"];
+            /** Format: date */
+            readonly scheduled_date: string | null;
+            /** Format: date-time */
+            readonly slot_start: string | null;
+            /** Format: date-time */
+            readonly slot_end: string | null;
+            readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
+            readonly location_label: string;
+        };
+        JobCancel: {
+            reason: string;
+        };
+        /** @description POST /jobs/. No organization, status, technician, version or lat/lng. */
+        JobCreate: {
+            title: string;
+            description?: string;
+            customer_name: string;
+            customer_phone?: (string) | null;
+            category: components["schemas"]["CategoryEnum"];
+            is_urgent?: boolean;
+            address: string;
+            postal_code: string;
+            /** Format: date-time */
+            slot_start?: string | null;
+            /** Format: date-time */
+            slot_end?: string | null;
+            estimated_duration_minutes?: number;
+            skill_ids?: number[];
+        };
+        /** @description The list row. No lat/lng on purpose: nobody types or reads coordinates. */
+        JobDetail: {
+            readonly id: number;
+            readonly title: string;
+            readonly customer_name: string;
+            readonly address: string;
+            readonly postal_code: string;
+            readonly category: components["schemas"]["CategoryEnum"];
+            readonly is_urgent: boolean;
+            /** @default unassigned */
+            readonly status: components["schemas"]["StatusEnum"];
+            readonly technician: components["schemas"]["JobTechnician"];
+            /** Format: date */
+            readonly scheduled_date: string | null;
+            /** Format: date-time */
+            readonly slot_start: string | null;
+            /** Format: date-time */
+            readonly slot_end: string | null;
+            readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
+            readonly location_label: string;
+            readonly description: string;
+            readonly customer_phone: string | null;
+            readonly estimated_duration_minutes: number;
+            readonly acceptable_skills: components["schemas"]["SkillBrief"][];
+            readonly version: number;
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly history: components["schemas"]["JobHistory"][];
+        };
+        JobHistory: {
+            readonly id: number;
+            readonly from_status: string;
+            readonly to_status: components["schemas"]["ToStatusEnum"];
+            readonly reason: string;
+            readonly changed_by: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        JobTechnician: {
+            readonly id: number;
+            readonly full_name: string;
         };
         Login: {
             /** Format: email */
@@ -323,6 +483,21 @@ export interface components {
             readonly id: number;
             name: string;
         };
+        PaginatedJobList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["Job"][];
+        };
         PaginatedUserList: {
             /** @example 123 */
             count: number;
@@ -337,6 +512,24 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["User"][];
+        };
+        /** @description PATCH /jobs/{id}/. `version` is required. Status and technician never change here. */
+        PatchedJobUpdate: {
+            title?: string;
+            description?: string;
+            customer_name?: string;
+            customer_phone?: (string) | null;
+            category?: components["schemas"]["CategoryEnum"];
+            is_urgent?: boolean;
+            address?: string;
+            postal_code?: string;
+            /** Format: date-time */
+            slot_start?: string | null;
+            /** Format: date-time */
+            slot_end?: string | null;
+            estimated_duration_minutes?: number;
+            skill_ids?: number[];
+            version?: number;
         };
         PatchedOrganization: {
             readonly id?: number;
@@ -397,6 +590,10 @@ export interface components {
             name: string;
             description?: string | null;
         };
+        SkillBrief: {
+            readonly id: number;
+            readonly name: string;
+        };
         /** @description Input for POST /users/. There is deliberately no `organization` field. */
         StaffCreate: {
             /** Format: email */
@@ -406,6 +603,17 @@ export interface components {
             role: components["schemas"]["RoleEnum"];
             technician?: components["schemas"]["TechnicianInput"];
         };
+        /**
+         * @description * `unassigned` - Unassigned
+         *     * `assigned` - Assigned
+         *     * `ongoing` - Ongoing
+         *     * `completed` - Completed
+         *     * `incomplete` - Incomplete
+         *     * `failed` - Failed
+         *     * `canceled` - Canceled
+         * @enum {string}
+         */
+        StatusEnum: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
         TechnicianDetail: {
             readonly id: number;
             readonly user: components["schemas"]["User"];
@@ -423,6 +631,17 @@ export interface components {
             /** Format: time */
             shift_end: string;
         };
+        /**
+         * @description * `unassigned` - Unassigned
+         *     * `assigned` - Assigned
+         *     * `ongoing` - Ongoing
+         *     * `completed` - Completed
+         *     * `incomplete` - Incomplete
+         *     * `failed` - Failed
+         *     * `canceled` - Canceled
+         * @enum {string}
+         */
+        ToStatusEnum: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
         User: {
             readonly id: number;
             /**
@@ -592,6 +811,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    jobs_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                scheduled_date?: string;
+                /**
+                 * @description * `unassigned` - Unassigned
+                 *     * `assigned` - Assigned
+                 *     * `ongoing` - Ongoing
+                 *     * `completed` - Completed
+                 *     * `incomplete` - Incomplete
+                 *     * `failed` - Failed
+                 *     * `canceled` - Canceled
+                 */
+                status?: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
+                technician?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedJobList"];
+                };
+            };
+        };
+    };
+    jobs_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobCreate"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobCreate"];
+                "multipart/form-data": components["schemas"]["JobCreate"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedJobUpdate"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedJobUpdate"];
+                "multipart/form-data": components["schemas"]["PatchedJobUpdate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_cancel_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobCancel"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobCancel"];
+                "multipart/form-data": components["schemas"]["JobCancel"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
                 };
             };
         };
