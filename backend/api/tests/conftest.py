@@ -5,7 +5,7 @@ from django.core.cache import cache
 from drf_spectacular.generators import EndpointEnumerator
 from rest_framework.test import APIClient
 
-from api.models import CustomUser, Organization, Technician
+from api.models import CustomUser, Job, Organization, Skill, Technician
 
 PASSWORD = "Str0ng-pass-phrase!"
 Role = CustomUser.Role
@@ -103,3 +103,30 @@ def csrf_client():
     token = client.cookies["csrftoken"].value
     client.csrf_headers = {"HTTP_X_CSRFTOKEN": token}
     return client
+
+
+def make_job(organization, **overrides):
+    """A valid, unassigned, non-urgent job with a located address."""
+    start = datetime.datetime(2026, 11, 2, 9, tzinfo=datetime.UTC)
+    fields = {
+        "title": "Fix AC",
+        "customer_name": "Ada Customer",
+        "category": "hvac",
+        "address": "1 Main St",
+        "postal_code": "78701",
+        "geocode_status": "ok",
+        "lat": 30.2,
+        "lng": -97.7,
+        "slot_start": start,
+        "slot_end": start + datetime.timedelta(hours=2),
+        "scheduled_date": start.date(),
+    }
+    skills = overrides.pop("skills", None)
+    fields.update(overrides)
+    job = Job.objects.create(organization=organization, **fields)
+    job.acceptable_skills.set(skills or Skill.objects.filter(name="HVAC"))
+    return job
+
+
+def technician_of(user):
+    return Technician.objects.get(user=user)

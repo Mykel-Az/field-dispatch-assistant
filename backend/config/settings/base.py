@@ -120,6 +120,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API documentation for the Field Dispatch Assistant project.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # Job.status and JobStatusHistory.to_status share one choice set: name it once.
+    "ENUM_NAME_OVERRIDES": {"JobStatusEnum": "api.models.JobStatus.choices"},
 }
 
 # Password validation
@@ -172,3 +174,8 @@ MAILERS = {
 # EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 AUTH_USER_MODEL = "api.CustomUser"
+
+# Geocoding provider (dotted path to a class with .geocode(address, postal_code)).
+# The default fails every lookup on purpose: real coordinates only come from a
+# real provider. Tests and local development override it with the fake.
+GEOCODER_CLASS = os.getenv("GEOCODER_CLASS", "geocoding.base.UnavailableGeocoder")
