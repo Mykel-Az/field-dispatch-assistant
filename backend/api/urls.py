@@ -3,6 +3,7 @@ from rest_framework.routers import SimpleRouter
 
 from .views import (
     ChangePasswordView,
+    JobViewSet,
     LoginView,
     LogoutView,
     MeView,
@@ -18,6 +19,7 @@ from .views import (
 router = SimpleRouter()  # SimpleRouter: no auto-generated API root view
 router.register("users", UserViewSet, basename="user")
 router.register("technicians", TechnicianViewSet, basename="technician")
+router.register("jobs", JobViewSet, basename="job")
 
 urlpatterns = [
     path("health/", health_check, name="health_check"),

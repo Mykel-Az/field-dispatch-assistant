@@ -1,13 +1,13 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.core.validators import RegexValidator
+from django.core.validators import MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower
 
 from dispatch_engine import lifecycle as lc
 
-from .manager import TenantQuerySet, TenantScopedModel
+from .manager import AppendOnlyQuerySet, TenantQuerySet, TenantScopedModel
 
 # Create your models here.
 phone_validator = RegexValidator(
@@ -240,17 +240,19 @@ class Job(AddressMixin, TenantScopedModel):
     customer_phone = models.CharField(
         max_length=20, blank=True, null=True, validators=[phone_validator]
     )
-    category = models.TextChoices(max_length=20, choice=JobCategory.choices)
+    category = models.CharField(max_length=20, choices=JobCategory.choices)
     is_urgent = models.BooleanField(default=False)
     status = models.CharField(
         max_length=20, choices=JobStatus.choices, default=JobStatus.UNASSIGNED
     )
     technician = models.ForeignKey(
-        Technician, on_delete=models.PROTECT, related_name="Jobs", blank=True, null=True
+        Technician, on_delete=models.PROTECT, related_name="jobs", blank=True, null=True
     )
 
     acceptable_skills = models.ManyToManyField("Skill", related_name="jobs")
-    estimated_duration_minutes = models.PositiveSmallIntegerField(default=60)
+    estimated_duration_minutes = models.PositiveSmallIntegerField(
+        default=60, validators=[MinValueValidator(1)]
+    )
     scheduled_date = models.DateField(null=True, blank=True)
     slot_start = models.DateTimeField(null=True, blank=True)
     slot_end = models.DateTimeField(null=True, blank=True)
@@ -270,10 +272,14 @@ class Job(AddressMixin, TenantScopedModel):
                 condition=Q(status="ongoing"),
                 name="one_ongoing_job_per_technician",
             ),  # inv 3
+            # Only live stops compete for a position. Without the condition a
+            # Completed job holding position 1 would block a new Assigned job
+            # from taking position 1 on the same day. NULLs stay distinct.
             models.UniqueConstraint(
                 fields=["technician", "scheduled_date", "sequence_position"],
+                condition=Q(status__in=["assigned", "ongoing"]),
                 name="unique_stop_per_technician_day",
-            ),  # NULLs are distinct in Postgres/SQLite
+            ),
             models.CheckConstraint(
                 condition=~Q(status__in=["assigned", "ongoing"])
                 | Q(technician__isnull=False),
@@ -299,43 +305,54 @@ class Job(AddressMixin, TenantScopedModel):
             ),  # inv 16
         ]
         indexes = [
-            models.Index(fields=["organization", "status"], name="wo_org_status_idx"),
+            models.Index(fields=["organization", "status"], name="job_org_status_idx"),
             models.Index(
-                fields=["organization", "scheduled_date"], name="wo_org_sched_idx"
+                fields=["organization", "scheduled_date"], name="job_org_sched_idx"
             ),
-            models.Index(fields=["technician"], name="wo_technician_idx"),
+            models.Index(fields=["technician"], name="job_technician_idx"),
         ]
 
     def save(self, *args, **kwargs):
+        # Invariant 24: a job and its technician belong to the same organization.
         if (
             self.technician_id
-            and not type(self.technician)
-            ._base_manager.filter(
-                pk=self.technician_id, organization_id=self.organization_id
-            )
-            .exists()
+            and self.technician.organization_id != self.organization_id
         ):
-            raise ValueError(
-                "technician belongs to another organization"
-            )  # match Technician.save()
+            raise ValueError("technician belongs to another organization")
         super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
 
 
 class JobStatusHistory(TenantScopedModel):
+    """Append-only (invariant 15): one row per status change, never edited."""
+
     job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="history")
     from_status = models.CharField(max_length=20, blank=True)
     to_status = models.CharField(max_length=20, choices=JobStatus.choices)
+    # The technician involved in this change: the one assigned, or the one
+    # released. Kept here because the job row forgets them once unassigned.
     technician = models.ForeignKey(
-        "Technician", null=True, blank=True, on_delete=models.PROTECT
+        Technician, null=True, blank=True, on_delete=models.PROTECT
     )
     changed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, blank=True, null=True
     )
     reason = models.TextField(blank=True)
-    created_At = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = AppendOnlyQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name_plural = "job status history"
+
+    # TIME: Python-level guards only. The full-fidelity path is a Postgres
+    # trigger that rejects UPDATE and DELETE on this table, so raw SQL and
+    # queryset._raw_delete cannot bypass it either.
     def save(self, *args, **kwargs):
-        if self.pk is not None:
+        if not self._state.adding:
             raise ValueError("history rows are append-only")
         super().save(*args, **kwargs)
 

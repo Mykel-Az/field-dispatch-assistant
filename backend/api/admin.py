@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import CustomUser, Organization, Skill
+from .models import (
+    CandidateSkillRule,
+    CustomUser,
+    Job,
+    JobStatusHistory,
+    Organization,
+    Skill,
+)
 
 # Register your models here.
 
@@ -73,3 +80,32 @@ class OrganizationAdmin(admin.ModelAdmin):
 admin.site.register(Organization, OrganizationAdmin)
 
 admin.site.register(Skill)
+
+
+class ReadOnlyAdmin(admin.ModelAdmin):
+    """Jobs change through services (status rules, history), never by hand."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Job)
+class JobAdmin(ReadOnlyAdmin):
+    list_display = ["title", "organization", "status", "technician", "scheduled_date"]
+    list_filter = ["status", "category"]
+    search_fields = ["title", "customer_name"]
+
+
+@admin.register(JobStatusHistory)
+class JobStatusHistoryAdmin(ReadOnlyAdmin):
+    list_display = ["job", "from_status", "to_status", "changed_by", "created_at"]
+    list_filter = ["to_status"]
+
+
+admin.site.register(CandidateSkillRule)

@@ -1,23 +1,38 @@
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .exceptions import Conflict
 from .mixins import TenantScopedViewMixin
-from .models import GeocodeStatus, Organization, Skill, Technician
+from .models import (
+    GeocodeStatus,
+    Job,
+    JobStatusHistory,
+    Organization,
+    Skill,
+    Technician,
+)
 from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
 from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
     HealthSerializer,
+    JobCancelSerializer,
+    JobCreateSerializer,
+    JobDetailSerializer,
+    JobFilterSerializer,
+    JobSerializer,
+    JobUpdateSerializer,
     LoginSerializer,
     OrganizationSerializer,
     RegisterSerializer,
@@ -30,18 +45,15 @@ from .serializers import (
     UserUpdateSerializer,
 )
 from .services import accounts
+from .services import jobs as job_service
 from .services.accounts import (
     CannotChangeOwnPasswordHereError,
     EmailUnavailableError,
+    HasOngoingJobError,
     LastHeadError,
     User,
 )
-
-
-class Conflict(APIException):
-    status_code = status.HTTP_409_CONFLICT
-    default_detail = "Conflict."
-    default_code = "conflict"
+from .versioning import check_and_bump_version
 
 
 @extend_schema(responses=HealthSerializer)
@@ -191,6 +203,11 @@ class UserViewSet(
                 "An organization needs at least one active head dispatcher.",
                 code="last_head",
             ) from None
+        except HasOngoingJobError:
+            raise Conflict(
+                "This technician has a job in progress. Finish or reassign it first.",
+                code="has_ongoing_job",
+            ) from None
         return Response(UserSerializer(target).data)
 
     @extend_schema(request=None, responses=UserSerializer)
@@ -239,18 +256,13 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             org = Organization.objects.select_for_update().get(
                 pk=serializer.instance.pk
             )
-            if serializer.validated_data["version"] != org.version:
-                raise Conflict(
-                    "This organization was changed by someone else. Reload it.",
-                    code="stale_version",
-                )
+            data = dict(serializer.validated_data)
+            check_and_bump_version(org, data.pop("version"))
             serializer.instance = org
-            data = serializer.validated_data
             if data.get("lat") is not None and data.get("lng") is not None:
                 data["geocode_status"] = GeocodeStatus.MANUAL
             for field, value in data.items():
                 setattr(org, field, value)
-            org.version += 1  # the client's version is replaced, not stored
             org.save()
 
 
@@ -302,3 +314,100 @@ class SkillViewSet(generics.ListAPIView):
     serializer_class = SkillSerializer
     permission_classes = [IsDispatcher]
     pagination_class = None  # Disable pagination for this view
+
+
+DETAIL_ACTIONS = {"retrieve", "create", "partial_update", "cancel"}
+
+
+class JobViewSet(
+    TenantScopedViewMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+    stay for the audit trail. Technicians get their own endpoint in Sprint 2."""
+
+    queryset = Job.objects.select_related("technician__user").order_by(
+        "-is_urgent", "scheduled_date", "slot_start", "id"
+    )
+    permission_classes = [IsDispatcher]
+    serializer_class = JobSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action in DETAIL_ACTIONS:
+            return qs.prefetch_related(
+                "acceptable_skills",
+                Prefetch(
+                    "history",
+                    queryset=JobStatusHistory.objects.select_related("changed_by"),
+                ),
+            )
+        if self.action == "list":
+            filters = JobFilterSerializer(data=self.request.query_params)
+            filters.is_valid(raise_exception=True)
+            for name, value in filters.validated_data.items():
+                qs = qs.filter(**{name: value})
+        return qs
+
+    def get_serializer_class(self):
+        if self.action in DETAIL_ACTIONS:
+            return JobDetailSerializer
+        return JobSerializer
+
+    def _detail(self, job, status_code=status.HTTP_200_OK):
+        fresh = self.get_queryset().get(pk=job.pk)
+        return Response(JobDetailSerializer(fresh).data, status=status_code)
+
+    @extend_schema(
+        parameters=[JobFilterSerializer],
+        responses=JobSerializer(many=True),
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+
+    @extend_schema(request=JobCreateSerializer, responses={201: JobDetailSerializer})
+    def create(self, request, *args, **kwargs):
+        serializer = JobCreateSerializer(
+            data=request.data, context={"request": request}
+        )
+        serializer.is_valid(raise_exception=True)
+        job = serializer.save()
+        return self._detail(job, status.HTTP_201_CREATED)
+
+    @extend_schema(request=JobUpdateSerializer, responses=JobDetailSerializer)
+    def partial_update(self, request, pk=None):
+        job = self.get_object()  # 404 for another organization
+        serializer = JobUpdateSerializer(job, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        try:
+            updated = job_service.update_job(
+                job=job, client_version=data.pop("version"), **data
+            )
+        except job_service.JobNotEditable:
+            raise Conflict(
+                "This job is already planned. Unassign it before changing its "
+                "address, time or skills.",
+                code="job_not_editable",
+            ) from None
+        return self._detail(updated)
+
+    @extend_schema(request=JobCancelSerializer, responses=JobDetailSerializer)
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        job = self.get_object()
+        serializer = JobCancelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            canceled = job_service.cancel_job(
+                job=job, actor=request.user, reason=serializer.validated_data["reason"]
+            )
+        except job_service.IllegalJobTransition:
+            raise Conflict(
+                f"A {job.status} job cannot be canceled.", code="illegal_transition"
+            ) from None
+        return self._detail(canceled)

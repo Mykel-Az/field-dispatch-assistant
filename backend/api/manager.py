@@ -19,3 +19,13 @@ class TenantScopedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class AppendOnlyQuerySet(TenantQuerySet):
+    """Blocks bulk UPDATE and DELETE; used by the append-only history table."""
+
+    def update(self, **kwargs):
+        raise ValueError("history rows are append-only")
+
+    def delete(self):
+        raise ValueError("history rows are append-only")

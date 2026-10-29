@@ -1,8 +1,19 @@
+import re
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Job, JobStatusHistory, Organization, Skill, Technician
+from .models import (
+    Job,
+    JobStatus,
+    JobStatusHistory,
+    Organization,
+    Skill,
+    Technician,
+)
+from .services import jobs as job_service
 from .services.accounts import register_organization
 
 User = get_user_model()
@@ -243,11 +254,32 @@ class HealthSerializer(serializers.Serializer):
     status = serializers.CharField()
 
 
-class JobSerializer(serializers.ModelSerializer):
-    technician = TechnicianDetailSerializer()
+ZIP_PATTERN = re.compile(r"^\d{5}(-\d{4})?$")
+
+
+class SkillBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ["id", "name"]
+        read_only_fields = fields
+
+
+class JobTechnicianSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source="user.full_name", read_only=True)
 
     class Meta:
-        models = Job
+        model = Technician
+        fields = ["id", "full_name"]
+        read_only_fields = fields
+
+
+class JobSerializer(serializers.ModelSerializer):
+    """The list row. No lat/lng on purpose: nobody types or reads coordinates."""
+
+    technician = JobTechnicianSerializer(read_only=True)
+
+    class Meta:
+        model = Job
         fields = [
             "id",
             "title",
@@ -257,38 +289,209 @@ class JobSerializer(serializers.ModelSerializer):
             "category",
             "is_urgent",
             "status",
-            "technician{id, full_name}",
+            "technician",
             "scheduled_date",
             "slot_start",
             "slot_end",
             "geocode_status",
             "location_label",
         ]
+        read_only_fields = fields
 
 
 class JobHistorySerializer(serializers.ModelSerializer):
-    class Meta:
-        models = JobStatusHistory
-        fields = ["__all__"]
-
-
-class JobDetailSerializer(serializers.ModelSerializer):
-    job = JobSerializer()
-    history = JobHistorySerializer()
-    acceptable_skills = SkillSerializer()
+    changed_by = serializers.SerializerMethodField()
 
     class Meta:
-        models = Job
+        model = JobStatusHistory
         fields = [
-            "job",
+            "id",
+            "from_status",
+            "to_status",
+            "reason",
+            "changed_by",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_changed_by(self, obj) -> dict | None:
+        user = obj.changed_by
+        return None if user is None else {"id": user.id, "full_name": user.full_name}
+
+
+class JobDetailSerializer(JobSerializer):
+    acceptable_skills = SkillBriefSerializer(many=True, read_only=True)
+    history = JobHistorySerializer(many=True, read_only=True)
+
+    class Meta(JobSerializer.Meta):
+        fields = [
+            *JobSerializer.Meta.fields,
             "description",
             "customer_phone",
-            "acceptable_skills[{id, name}]",
+            "estimated_duration_minutes",
+            "acceptable_skills",
             "version",
             "created_at",
             "history",
         ]
+        read_only_fields = fields
 
 
-class JobCreateSerializer(serializers.Serializer):
-    pass
+class _JobInputMixin:
+    """Validation shared by create and PATCH."""
+
+    def validate_postal_code(self, value):
+        if not ZIP_PATTERN.match(value):
+            raise serializers.ValidationError(
+                "Enter a ZIP code like 12345 or 12345-6789."
+            )
+        return value
+
+    @staticmethod
+    def _check_slot(start, end, is_urgent):
+        if (start is None) != (end is None):
+            raise serializers.ValidationError(
+                {
+                    "slot_end"
+                    if start
+                    else "slot_start": "Give both slot times or neither."
+                }
+            )
+        if start is None and not is_urgent:
+            raise serializers.ValidationError(
+                {"slot_start": "Required unless the job is urgent."}
+            )
+        if start is not None and end <= start:
+            raise serializers.ValidationError(
+                {"slot_end": "slot_end must be after slot_start."}
+            )
+
+    @staticmethod
+    def _scheduled_date(start):
+        # TIME: dates are UTC. The full-fidelity path is an Organization
+        # timezone, so a 00:30 local slot lands on the right day.
+        return start.date() if start else timezone.localdate()
+
+
+class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
+    """POST /jobs/. No organization, status, technician, version or lat/lng."""
+
+    skill_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.all(),
+        many=True,
+        source="acceptable_skills",
+        required=False,
+    )
+
+    class Meta:
+        model = Job
+        fields = [
+            "title",
+            "description",
+            "customer_name",
+            "customer_phone",
+            "category",
+            "is_urgent",
+            "address",
+            "postal_code",
+            "slot_start",
+            "slot_end",
+            "estimated_duration_minutes",
+            "skill_ids",
+        ]
+        extra_kwargs = {
+            "address": {"required": True, "allow_blank": False},
+            "postal_code": {"required": True, "allow_blank": False},
+            "estimated_duration_minutes": {"min_value": 1, "max_value": 1440},
+        }
+
+    def validate(self, attrs):
+        is_urgent = attrs.get("is_urgent", False)
+        start, end = attrs.get("slot_start"), attrs.get("slot_end")
+        self._check_slot(start, end, is_urgent)
+        skills = attrs.pop("acceptable_skills", None) or job_service.default_skills_for(
+            attrs["category"]
+        )
+        if not skills:
+            raise serializers.ValidationError(
+                {"skill_ids": "Select at least one skill."}
+            )
+        attrs["skills"] = skills
+        attrs["scheduled_date"] = self._scheduled_date(start)
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        return job_service.create_job(
+            organization=request.user.organization,
+            actor=request.user,
+            **validated_data,
+        )
+
+
+class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
+    """PATCH /jobs/{id}/. `version` is required. Status and technician never change here."""
+
+    version = serializers.IntegerField(min_value=1)
+    skill_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.all(),
+        many=True,
+        source="acceptable_skills",
+        required=False,
+        allow_empty=False,
+        error_messages={"empty": "Select at least one skill."},
+    )
+
+    class Meta:
+        model = Job
+        fields = [
+            "title",
+            "description",
+            "customer_name",
+            "customer_phone",
+            "category",
+            "is_urgent",
+            "address",
+            "postal_code",
+            "slot_start",
+            "slot_end",
+            "estimated_duration_minutes",
+            "skill_ids",
+            "version",
+        ]
+        extra_kwargs = {
+            "address": {"allow_blank": False},
+            "postal_code": {"allow_blank": False},
+            "estimated_duration_minutes": {"min_value": 1, "max_value": 1440},
+        }
+
+    def validate(self, attrs):
+        extra = set(self.initial_data) - set(self.fields)
+        if extra:
+            raise serializers.ValidationError(
+                {name: "This field cannot be changed here." for name in sorted(extra)}
+            )
+        if "version" not in attrs:
+            raise serializers.ValidationError({"version": "This field is required."})
+        job = self.instance
+        is_urgent = attrs.get("is_urgent", job.is_urgent)
+        start = attrs.get("slot_start", job.slot_start)
+        end = attrs.get("slot_end", job.slot_end)
+        self._check_slot(start, end, is_urgent)
+        if {"slot_start", "slot_end", "is_urgent"} & set(attrs):
+            attrs["scheduled_date"] = self._scheduled_date(start)
+        if "acceptable_skills" in attrs:
+            attrs["skills"] = attrs.pop("acceptable_skills")
+        return attrs
+
+
+class JobCancelSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500)
+
+
+class JobFilterSerializer(serializers.Serializer):
+    """Query string for GET /jobs/. Bad values are a 400, not silently ignored."""
+
+    status = serializers.ChoiceField(choices=JobStatus.choices, required=False)
+    scheduled_date = serializers.DateField(required=False)
+    technician = serializers.IntegerField(required=False, min_value=1)
