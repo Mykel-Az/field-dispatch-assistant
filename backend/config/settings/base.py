@@ -109,6 +109,8 @@ REST_FRAMEWORK = {
         "user": "120/minute",
         "register": "5/hour",
         "login": "10/min",
+        # address lookups hit an outside service: keep one user from flooding it
+        "geocode": "30/min",
     },
     # How many reverse proxies sit in front of Django. Wrong values let a client
     # spoof its IP via X-Forwarded-For and dodge throttling. Set from the S1-1e spike.

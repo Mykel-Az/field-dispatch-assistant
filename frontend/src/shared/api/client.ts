@@ -82,3 +82,16 @@ export const assignJob = (id: number, technicianId: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/assign/`, { technician_id: technicianId, version });
 export const unassignJob = (id: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/unassign/`, { version });
+
+export interface AddressCheck {
+  status: 'ok' | 'approximate' | 'failed' | 'pending' | 'manual';
+  lat: number | null;
+  lng: number | null;
+  label: string;
+}
+export const lookupAddress = (address: string, postalCode: string) =>
+  post<AddressCheck>('/geocode/lookup/', { address, postal_code: postalCode });
+export const pinJob = (id: number, lat: number, lng: number, version: number) =>
+  post<JobDetail>(`/jobs/${id}/location/`, { lat, lng, version });
+export const retryGeocode = (id: number, version: number) =>
+  post<JobDetail>(`/jobs/${id}/retry-geocode/`, { version });

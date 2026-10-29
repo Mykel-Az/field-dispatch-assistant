@@ -26,12 +26,15 @@ from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
 from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
+    GeocodeLookupSerializer,
+    GeocodeResultSerializer,
     HealthSerializer,
     JobAssignSerializer,
     JobCancelSerializer,
     JobCreateSerializer,
     JobDetailSerializer,
     JobFilterSerializer,
+    JobPinSerializer,
     JobSerializer,
     JobUnassignSerializer,
     JobUpdateSerializer,
@@ -46,7 +49,7 @@ from .serializers import (
     UserSerializer,
     UserUpdateSerializer,
 )
-from .services import accounts
+from .services import accounts, locations
 from .services import jobs as job_service
 from .services.accounts import (
     CannotChangeOwnPasswordHereError,
@@ -471,3 +474,58 @@ class JobViewSet(
                 f"A {job.status} job cannot be unassigned.", code="illegal_transition"
             ) from None
         return self._detail(updated)
+
+    @extend_schema(request=JobPinSerializer, responses=JobDetailSerializer)
+    @action(detail=True, methods=["post"])
+    def location(self, request, pk=None):
+        """Place the job on the map by hand (the fix when an address cannot be found)."""
+        job = self.get_object()
+        serializer = JobPinSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            updated = job_service.pin_job(
+                job=job,
+                lat=data["lat"],
+                lng=data["lng"],
+                client_version=data["version"],
+            )
+        except job_service.JobNotEditable:
+            raise Conflict(
+                "This job is already planned. Unassign it before moving its location.",
+                code="job_not_editable",
+            ) from None
+        return self._detail(updated)
+
+    @extend_schema(request=JobUnassignSerializer, responses=JobDetailSerializer)
+    @action(detail=True, methods=["post"], url_path="retry-geocode")
+    def retry_geocode(self, request, pk=None):
+        """Look the saved address up again."""
+        job = self.get_object()
+        serializer = JobUnassignSerializer(data=request.data)  # just {version}
+        serializer.is_valid(raise_exception=True)
+        try:
+            updated = job_service.retry_geocode(
+                job=job, client_version=serializer.validated_data["version"]
+            )
+        except job_service.JobNotEditable:
+            raise Conflict(
+                "This job is already planned. Unassign it before changing its location.",
+                code="job_not_editable",
+            ) from None
+        return self._detail(updated)
+
+
+class GeocodeLookupView(APIView):
+    """POST /geocode/lookup/: "where is this address?", without saving anything.
+    Lets the job form show the found place (and offer a manual pin) before saving."""
+
+    permission_classes = [IsDispatcher]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "geocode"
+
+    @extend_schema(request=GeocodeLookupSerializer, responses=GeocodeResultSerializer)
+    def post(self, request):
+        serializer = GeocodeLookupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(locations.lookup(**serializer.validated_data))

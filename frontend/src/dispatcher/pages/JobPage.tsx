@@ -9,6 +9,7 @@ import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
 import { ui } from '../../shared/ui';
 import AssignPanel from '../components/AssignPanel';
 import JobForm from '../components/JobForm';
+import LocationPanel from '../components/LocationPanel';
 
 const FINISHED = new Set(['completed', 'failed', 'canceled']);
 
@@ -208,6 +209,10 @@ export default function JobPage() {
 
           {!editing && (
             <AssignPanel job={job} onChanged={(next) => (next ? setJob(next) : void load())} />
+          )}
+
+          {!editing && (
+            <LocationPanel job={job} onChanged={(next) => (next ? setJob(next) : void load())} />
           )}
 
           {!editing && isJobStatus(job.status) && CANCELABLE.has(job.status) && (

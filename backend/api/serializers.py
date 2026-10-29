@@ -329,6 +329,8 @@ class JobDetailSerializer(JobSerializer):
             "description",
             "customer_phone",
             "estimated_duration_minutes",
+            "lat",  # only the detail: the location panel draws the pin
+            "lng",
             "acceptable_skills",
             "version",
             "created_at",
@@ -495,6 +497,29 @@ class JobAssignSerializer(serializers.Serializer):
 
 
 class JobUnassignSerializer(serializers.Serializer):
+    version = serializers.IntegerField(min_value=1)
+
+
+class GeocodeLookupSerializer(serializers.Serializer):
+    address = serializers.CharField(max_length=255, allow_blank=True, default="")
+    postal_code = serializers.CharField(max_length=10, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if not (attrs["address"].strip() or attrs["postal_code"].strip()):
+            raise serializers.ValidationError("Enter an address or a ZIP code.")
+        return attrs
+
+
+class GeocodeResultSerializer(serializers.Serializer):
+    status = serializers.CharField()  # a GeocodeStatus value
+    lat = serializers.FloatField(allow_null=True)
+    lng = serializers.FloatField(allow_null=True)
+    label = serializers.CharField(allow_blank=True)
+
+
+class JobPinSerializer(serializers.Serializer):
+    lat = serializers.FloatField(min_value=-90, max_value=90)
+    lng = serializers.FloatField(min_value=-180, max_value=180)
     version = serializers.IntegerField(min_value=1)
 
 

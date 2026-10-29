@@ -116,6 +116,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
+  /api/geocode/lookup/:
+    post:
+      operationId: geocode_lookup_create
+      description: |-
+        POST /geocode/lookup/: "where is this address?", without saving anything.
+        Lets the job form show the found place (and offer a manual pin) before saving.
+      tags:
+      - geocode
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeocodeLookup'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/GeocodeLookup'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GeocodeLookup'
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeocodeResult'
+          description: ''
   /api/health/:
     get:
       operationId: health_retrieve
@@ -273,6 +301,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/JobDetail'
           description: ''
+  /api/jobs/{id}/assign/:
+    post:
+      operationId: jobs_assign_create
+      description: |-
+        Manually give an unassigned job to a technician (the planner will do this
+        automatically later; a dispatcher can always override it).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobAssign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobAssign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobAssign'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
   /api/jobs/{id}/cancel/:
     post:
       operationId: jobs_cancel_create
@@ -299,6 +363,109 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/JobCancel'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/jobs/{id}/location/:
+    post:
+      operationId: jobs_location_create
+      description: Place the job on the map by hand (the fix when an address cannot
+        be found).
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobPin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobPin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobPin'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/jobs/{id}/retry-geocode/:
+    post:
+      operationId: jobs_retry_geocode_create
+      description: Look the saved address up again.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/jobs/{id}/unassign/:
+    post:
+      operationId: jobs_unassign_create
+      description: Take an assigned job back to the unassigned queue.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobUnassign'
         required: true
       security:
       - sessionAuth: []
@@ -639,6 +806,37 @@ components:
       required:
       - current_password
       - new_password
+    GeocodeLookup:
+      type: object
+      properties:
+        address:
+          type: string
+          default: ''
+          maxLength: 255
+        postal_code:
+          type: string
+          default: ''
+          maxLength: 10
+    GeocodeResult:
+      type: object
+      properties:
+        status:
+          type: string
+        lat:
+          type: number
+          format: double
+          nullable: true
+        lng:
+          type: number
+          format: double
+          nullable: true
+        label:
+          type: string
+      required:
+      - label
+      - lat
+      - lng
+      - status
     GeocodeStatusEnum:
       enum:
       - pending
@@ -688,7 +886,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/JobStatusEnum'
           readOnly: true
           default: unassigned
         technician:
@@ -732,6 +930,18 @@ components:
       - status
       - technician
       - title
+    JobAssign:
+      type: object
+      properties:
+        technician_id:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - technician_id
+      - version
     JobCancel:
       type: object
       properties:
@@ -820,7 +1030,7 @@ components:
           readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusEnum'
+          - $ref: '#/components/schemas/JobStatusEnum'
           readOnly: true
           default: unassigned
         technician:
@@ -859,6 +1069,16 @@ components:
         estimated_duration_minutes:
           type: integer
           readOnly: true
+        lat:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        lng:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
         acceptable_skills:
           type: array
           items:
@@ -889,6 +1109,8 @@ components:
       - history
       - id
       - is_urgent
+      - lat
+      - lng
       - location_label
       - postal_code
       - scheduled_date
@@ -909,7 +1131,7 @@ components:
           readOnly: true
         to_status:
           allOf:
-          - $ref: '#/components/schemas/ToStatusEnum'
+          - $ref: '#/components/schemas/JobStatusEnum'
           readOnly: true
         reason:
           type: string
@@ -930,6 +1152,44 @@ components:
       - id
       - reason
       - to_status
+    JobPin:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        lng:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - lat
+      - lng
+      - version
+    JobStatusEnum:
+      enum:
+      - unassigned
+      - assigned
+      - ongoing
+      - completed
+      - incomplete
+      - failed
+      - canceled
+      type: string
+      description: |-
+        * `unassigned` - Unassigned
+        * `assigned` - Assigned
+        * `ongoing` - Ongoing
+        * `completed` - Completed
+        * `incomplete` - Incomplete
+        * `failed` - Failed
+        * `canceled` - Canceled
     JobTechnician:
       type: object
       properties:
@@ -942,6 +1202,14 @@ components:
       required:
       - full_name
       - id
+    JobUnassign:
+      type: object
+      properties:
+        version:
+          type: integer
+          minimum: 1
+      required:
+      - version
     Login:
       type: object
       properties:
@@ -1307,24 +1575,6 @@ components:
       - full_name
       - password
       - role
-    StatusEnum:
-      enum:
-      - unassigned
-      - assigned
-      - ongoing
-      - completed
-      - incomplete
-      - failed
-      - canceled
-      type: string
-      description: |-
-        * `unassigned` - Unassigned
-        * `assigned` - Assigned
-        * `ongoing` - Ongoing
-        * `completed` - Completed
-        * `incomplete` - Incomplete
-        * `failed` - Failed
-        * `canceled` - Canceled
     TechnicianDetail:
       type: object
       properties:
@@ -1376,24 +1626,6 @@ components:
       - shift_end
       - shift_start
       - skill_ids
-    ToStatusEnum:
-      enum:
-      - unassigned
-      - assigned
-      - ongoing
-      - completed
-      - incomplete
-      - failed
-      - canceled
-      type: string
-      description: |-
-        * `unassigned` - Unassigned
-        * `assigned` - Assigned
-        * `ongoing` - Ongoing
-        * `completed` - Completed
-        * `incomplete` - Incomplete
-        * `failed` - Failed
-        * `canceled` - Canceled
     User:
       type: object
       properties:

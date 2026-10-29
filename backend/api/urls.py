@@ -3,6 +3,7 @@ from rest_framework.routers import SimpleRouter
 
 from .views import (
     ChangePasswordView,
+    GeocodeLookupView,
     JobViewSet,
     LoginView,
     LogoutView,
@@ -30,6 +31,7 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("auth/me/", MeView.as_view(), name="me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("geocode/lookup/", GeocodeLookupView.as_view(), name="geocode-lookup"),
     path("organization/", OrganizationView.as_view(), name="organization"),
     path("", include(router.urls)),
 ]

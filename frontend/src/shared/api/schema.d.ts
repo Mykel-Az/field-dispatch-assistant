@@ -101,6 +101,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/geocode/lookup/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /geocode/lookup/: "where is this address?", without saving anything.
+         *     Lets the job form show the found place (and offer a manual pin) before saving.
+         */
+        post: operations["geocode_lookup_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health/": {
         parameters: {
             query?: never;
@@ -166,6 +186,26 @@ export interface paths {
         patch: operations["jobs_partial_update"];
         trace?: never;
     };
+    "/api/jobs/{id}/assign/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Manually give an unassigned job to a technician (the planner will do this
+         *     automatically later; a dispatcher can always override it).
+         */
+        post: operations["jobs_assign_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}/cancel/": {
         parameters: {
             query?: never;
@@ -180,6 +220,57 @@ export interface paths {
          *     stay for the audit trail. Technicians get their own endpoint in Sprint 2.
          */
         post: operations["jobs_cancel_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/location/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Place the job on the map by hand (the fix when an address cannot be found). */
+        post: operations["jobs_location_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/retry-geocode/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Look the saved address up again. */
+        post: operations["jobs_retry_geocode_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}/unassign/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take an assigned job back to the unassigned queue. */
+        post: operations["jobs_unassign_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -358,6 +449,20 @@ export interface components {
             current_password: string;
             new_password: string;
         };
+        GeocodeLookup: {
+            /** @default  */
+            address: string;
+            /** @default  */
+            postal_code: string;
+        };
+        GeocodeResult: {
+            status: string;
+            /** Format: double */
+            lat: number | null;
+            /** Format: double */
+            lng: number | null;
+            label: string;
+        };
         /**
          * @description * `pending` - Pending
          *     * `ok` - OK
@@ -380,7 +485,7 @@ export interface components {
             readonly category: components["schemas"]["CategoryEnum"];
             readonly is_urgent: boolean;
             /** @default unassigned */
-            readonly status: components["schemas"]["StatusEnum"];
+            readonly status: components["schemas"]["JobStatusEnum"];
             readonly technician: components["schemas"]["JobTechnician"];
             /** Format: date */
             readonly scheduled_date: string | null;
@@ -390,6 +495,10 @@ export interface components {
             readonly slot_end: string | null;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
+        };
+        JobAssign: {
+            technician_id: number;
+            version: number;
         };
         JobCancel: {
             reason: string;
@@ -421,7 +530,7 @@ export interface components {
             readonly category: components["schemas"]["CategoryEnum"];
             readonly is_urgent: boolean;
             /** @default unassigned */
-            readonly status: components["schemas"]["StatusEnum"];
+            readonly status: components["schemas"]["JobStatusEnum"];
             readonly technician: components["schemas"]["JobTechnician"];
             /** Format: date */
             readonly scheduled_date: string | null;
@@ -434,6 +543,10 @@ export interface components {
             readonly description: string;
             readonly customer_phone: string | null;
             readonly estimated_duration_minutes: number;
+            /** Format: double */
+            readonly lat: number | null;
+            /** Format: double */
+            readonly lng: number | null;
             readonly acceptable_skills: components["schemas"]["SkillBrief"][];
             readonly version: number;
             /** Format: date-time */
@@ -443,7 +556,7 @@ export interface components {
         JobHistory: {
             readonly id: number;
             readonly from_status: string;
-            readonly to_status: components["schemas"]["ToStatusEnum"];
+            readonly to_status: components["schemas"]["JobStatusEnum"];
             readonly reason: string;
             readonly changed_by: {
                 [key: string]: unknown;
@@ -451,9 +564,30 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
         };
+        JobPin: {
+            /** Format: double */
+            lat: number;
+            /** Format: double */
+            lng: number;
+            version: number;
+        };
+        /**
+         * @description * `unassigned` - Unassigned
+         *     * `assigned` - Assigned
+         *     * `ongoing` - Ongoing
+         *     * `completed` - Completed
+         *     * `incomplete` - Incomplete
+         *     * `failed` - Failed
+         *     * `canceled` - Canceled
+         * @enum {string}
+         */
+        JobStatusEnum: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
         JobTechnician: {
             readonly id: number;
             readonly full_name: string;
+        };
+        JobUnassign: {
+            version: number;
         };
         Login: {
             /** Format: email */
@@ -603,17 +737,6 @@ export interface components {
             role: components["schemas"]["RoleEnum"];
             technician?: components["schemas"]["TechnicianInput"];
         };
-        /**
-         * @description * `unassigned` - Unassigned
-         *     * `assigned` - Assigned
-         *     * `ongoing` - Ongoing
-         *     * `completed` - Completed
-         *     * `incomplete` - Incomplete
-         *     * `failed` - Failed
-         *     * `canceled` - Canceled
-         * @enum {string}
-         */
-        StatusEnum: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
         TechnicianDetail: {
             readonly id: number;
             readonly user: components["schemas"]["User"];
@@ -631,17 +754,6 @@ export interface components {
             /** Format: time */
             shift_end: string;
         };
-        /**
-         * @description * `unassigned` - Unassigned
-         *     * `assigned` - Assigned
-         *     * `ongoing` - Ongoing
-         *     * `completed` - Completed
-         *     * `incomplete` - Incomplete
-         *     * `failed` - Failed
-         *     * `canceled` - Canceled
-         * @enum {string}
-         */
-        ToStatusEnum: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
         User: {
             readonly id: number;
             /**
@@ -796,6 +908,31 @@ export interface operations {
             };
         };
     };
+    geocode_lookup_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["GeocodeLookup"];
+                "application/x-www-form-urlencoded": components["schemas"]["GeocodeLookup"];
+                "multipart/form-data": components["schemas"]["GeocodeLookup"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeocodeResult"];
+                };
+            };
+        };
+    };
     health_retrieve: {
         parameters: {
             query?: never;
@@ -924,6 +1061,34 @@ export interface operations {
             };
         };
     };
+    jobs_assign_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobAssign"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobAssign"];
+                "multipart/form-data": components["schemas"]["JobAssign"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
     jobs_cancel_create: {
         parameters: {
             query?: never;
@@ -939,6 +1104,90 @@ export interface operations {
                 "application/json": components["schemas"]["JobCancel"];
                 "application/x-www-form-urlencoded": components["schemas"]["JobCancel"];
                 "multipart/form-data": components["schemas"]["JobCancel"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_location_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobPin"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobPin"];
+                "multipart/form-data": components["schemas"]["JobPin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_retry_geocode_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobUnassign"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobUnassign"];
+                "multipart/form-data": components["schemas"]["JobUnassign"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_unassign_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobUnassign"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobUnassign"];
+                "multipart/form-data": components["schemas"]["JobUnassign"];
             };
         };
         responses: {
