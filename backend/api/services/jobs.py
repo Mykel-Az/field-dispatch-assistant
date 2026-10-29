@@ -6,7 +6,7 @@ from django.utils import timezone
 from dispatch_engine import lifecycle as lc
 
 from ..exceptions import Conflict
-from ..models import Job, JobStatus, JobStatusHistory, Skill
+from ..models import GeocodeStatus, Job, JobStatus, JobStatusHistory, Skill
 from ..versioning import check_and_bump_version
 from .locations import locate
 
@@ -64,6 +64,39 @@ def _record(job, *, from_status, actor, reason, technician_id):
         changed_by=actor,
         reason=reason,
     )
+
+
+def _plan_field_lock(job, client_version):
+    """Lock the job for a location change: right version, still unassigned."""
+    locked = Job.objects.select_for_update().get(pk=job.pk)
+    check_and_bump_version(locked, client_version)
+    if locked.status != JobStatus.UNASSIGNED:
+        raise JobNotEditable
+    return locked
+
+
+def pin_job(*, job, lat, lng, client_version):
+    """The dispatcher placed the job on the map by hand."""
+    with transaction.atomic():
+        locked = _plan_field_lock(job, client_version)
+        locked.lat, locked.lng = lat, lng
+        locked.geocode_status = GeocodeStatus.MANUAL
+        locked.location_label = "Pinned on the map"
+        locked.save()
+    return locked
+
+
+def retry_geocode(*, job, client_version):
+    """Look the stored address up again (the provider may have been down)."""
+    probe = Job(address=job.address, postal_code=job.postal_code)
+    locate(probe)  # network call: outside the transaction
+    with transaction.atomic():
+        locked = _plan_field_lock(job, client_version)
+        locked.lat, locked.lng = probe.lat, probe.lng
+        locked.geocode_status = probe.geocode_status
+        locked.location_label = probe.location_label
+        locked.save()
+    return locked
 
 
 def create_job(*, organization, actor, skills, **fields):

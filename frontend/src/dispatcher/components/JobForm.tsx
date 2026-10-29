@@ -1,12 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   createJob,
   fetchOrganization,
   fetchSkills,
+  lookupAddress,
+  pinJob,
   updateJob,
+  type AddressCheck,
   type Skill,
-} from "../../shared/api/client";
-import { ApiError } from "../../shared/api/http";
+} from '../../shared/api/client';
+import { ApiError } from '../../shared/api/http';
 import {
   CATEGORY_DEFAULT_MINUTES,
   CATEGORY_DEFAULT_SKILL,
@@ -14,9 +17,10 @@ import {
   type JobCategory,
   type JobCreateInput,
   type JobDetail,
-} from "../../shared/api/models";
-import { splitLocal, toIso } from "../../shared/jobTime";
-import { ui } from "../../shared/ui";
+} from '../../shared/api/models';
+import { splitLocal, toIso } from '../../shared/jobTime';
+import PinMap, { type LatLng } from '../../shared/map/PinMap';
+import { ui } from '../../shared/ui';
 
 const ZIP = /^\d{5}(-\d{4})?$/;
 // A ZIP typed at the end of the address ("... Austin, TX 78701") is picked up automatically.
@@ -24,10 +28,10 @@ const TRAILING_ZIP = /\b(\d{5}(?:-\d{4})?)\s*$/;
 
 /** The job's title is the first line of the problem, so the dispatcher types it once. */
 function deriveTitle(description: string, category: JobCategory): string {
-  const first = description.trim().split(/\n|(?<=[.!?])\s/)[0] ?? "";
-  if (first === "") return `${CATEGORY_LABEL[category]} job`;
+  const first = description.trim().split(/\n|(?<=[.!?])\s/)[0] ?? '';
+  if (first === '') return `${CATEGORY_LABEL[category]} job`;
   if (first.length <= 70) return first;
-  return first.slice(0, 70).replace(/\s+\S*$/, "") + "…";
+  return first.slice(0, 70).replace(/\s+\S*$/, '') + '…';
 }
 
 const hhmm = (t: string | null | undefined, fallback: string) =>
@@ -46,29 +50,30 @@ interface Props {
 export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   const editing = job !== undefined;
   // Once a job is planned, the address, time and skills are frozen (the API enforces it too).
-  const locked = editing && job.status !== "unassigned";
+  const locked = editing && job.status !== 'unassigned';
 
   const start = job?.slot_start ? splitLocal(job.slot_start) : null;
   const end = job?.slot_end ? splitLocal(job.slot_end) : null;
 
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [titleText, setTitleText] = useState(job?.title ?? "");
-  const [customerName, setCustomerName] = useState(job?.customer_name ?? "");
-  const [customerPhone, setCustomerPhone] = useState(job?.customer_phone ?? "");
+  const [office, setOffice] = useState<LatLng | null>(null);
+  const [titleText, setTitleText] = useState(job?.title ?? '');
+  const [customerName, setCustomerName] = useState(job?.customer_name ?? '');
+  const [customerPhone, setCustomerPhone] = useState(job?.customer_phone ?? '');
   const [category, setCategory] = useState<JobCategory>(
-    job?.category ?? "hvac",
+    job?.category ?? 'hvac',
   );
-  const [description, setDescription] = useState(job?.description ?? "");
-  const [address, setAddress] = useState(job?.address ?? "");
-  const [postalCode, setPostalCode] = useState(job?.postal_code ?? "");
+  const [description, setDescription] = useState(job?.description ?? '');
+  const [address, setAddress] = useState(job?.address ?? '');
+  const [postalCode, setPostalCode] = useState(job?.postal_code ?? '');
   const [duration, setDuration] = useState(
-    String(job?.estimated_duration_minutes ?? ""),
+    String(job?.estimated_duration_minutes ?? ''),
   );
   const [urgent, setUrgent] = useState(job?.is_urgent ?? false);
-  const [slotDate, setSlotDate] = useState(start?.date ?? "");
+  const [slotDate, setSlotDate] = useState(start?.date ?? '');
   // The window defaults to the organization's working day, so most jobs need no typing here.
-  const [slotStart, setSlotStart] = useState(start?.time ?? "08:00");
-  const [slotEnd, setSlotEnd] = useState(end?.time ?? "17:00");
+  const [slotStart, setSlotStart] = useState(start?.time ?? '08:00');
+  const [slotEnd, setSlotEnd] = useState(end?.time ?? '17:00');
   // Until the dispatcher touches the chips, the skills follow the category.
   const [skillsTouched, setSkillsTouched] = useState(editing);
   const [pickedSkills, setPickedSkills] = useState<number[]>(
@@ -85,8 +90,9 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     if (!editing) {
       fetchOrganization()
         .then((o) => {
-          setSlotStart(hhmm(o.work_start, "08:00"));
-          setSlotEnd(hhmm(o.work_end, "17:00"));
+          setSlotStart(hhmm(o.work_start, '08:00'));
+          setSlotEnd(hhmm(o.work_end, '17:00'));
+          if (o.lat != null && o.lng != null) setOffice({ lat: o.lat, lng: o.lng });
         })
         .catch(() => undefined);
     }
@@ -95,10 +101,31 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   const zipInAddress = TRAILING_ZIP.exec(address.trim())?.[1] ?? null;
   const zip = zipInAddress ?? postalCode;
   const showZipField =
-    zipInAddress === null && (editing || address.trim() !== "");
+    zipInAddress === null && (editing || address.trim() !== '');
+
+  // Address check (new jobs): runs when the dispatcher leaves the address, so there is no button to press.
+  const [check, setCheck] = useState<AddressCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [pin, setPin] = useState<LatLng | null>(null);
+  const [checkedKey, setCheckedKey] = useState('');
+
+  async function checkAddress() {
+    const key = `${address.trim()}|${zip}`;
+    if (editing || address.trim() === '' || !ZIP.test(zip) || key === checkedKey) return;
+    setCheckedKey(key);
+    setChecking(true);
+    setPin(null);
+    try {
+      setCheck(await lookupAddress(address.trim(), zip));
+    } catch {
+      setCheck({ status: 'failed', lat: null, lng: null, label: '' });
+    } finally {
+      setChecking(false);
+    }
+  }
   // Until the dispatcher sets it, the duration follows the category.
   const minutes =
-    duration !== "" ? duration : String(CATEGORY_DEFAULT_MINUTES[category]);
+    duration !== '' ? duration : String(CATEGORY_DEFAULT_MINUTES[category]);
 
   const categoryDefaults = skills
     .filter((s) => s.name === CATEGORY_DEFAULT_SKILL[category])
@@ -113,13 +140,13 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   function validate(): Record<string, string> {
     const found: Record<string, string> = {};
     if (!locked) {
-      if (!ZIP.test(zip)) found.postal_code = "Add the ZIP code, like 12345.";
+      if (!ZIP.test(zip)) found.postal_code = 'Add the ZIP code, like 12345.';
       if (!urgent) {
-        if (!slotDate) found.slot_start = "Pick the day.";
+        if (!slotDate) found.slot_start = 'Pick the day.';
         else if (slotEnd <= slotStart)
-          found.slot_end = "Must be later than the start.";
+          found.slot_end = 'Must be later than the start.';
       }
-      if (skillIds.length === 0) found.skill_ids = "Select at least one skill.";
+      if (skillIds.length === 0) found.skill_ids = 'Select at least one skill.';
     }
     return found;
   }
@@ -132,7 +159,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     if (Object.keys(problems).length > 0) return;
 
     const title = editing ? titleText : deriveTitle(description, category);
-    const phone = customerPhone.trim() === "" ? null : customerPhone.trim();
+    const phone = customerPhone.trim() === '' ? null : customerPhone.trim();
     const slot = urgent
       ? { slot_start: null, slot_end: null }
       : {
@@ -178,6 +205,14 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           ...(skillsTouched ? { skill_ids: skillIds } : {}),
         };
         saved = await createJob(input);
+        if (pin) {
+          // The dispatcher placed the pin by hand: apply it to the new job.
+          try {
+            saved = await pinJob(saved.id, pin.lat, pin.lng, saved.version);
+          } catch {
+            // The job exists; the Location panel on its page can place the pin again.
+          }
+        }
       }
       onSaved(saved);
     } catch (err) {
@@ -185,7 +220,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
       setErrors(
         err instanceof ApiError
           ? { ...err.fieldErrors, _: err.message }
-          : { _: "Could not reach the server." },
+          : { _: 'Could not reach the server.' },
       );
     } finally {
       setBusy(false);
@@ -194,7 +229,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
 
   const fieldError = (k: string) =>
     errors[k] && <span className={ui.error}>{errors[k]}</span>;
-  const showSummary = errors._ && !Object.keys(errors).some((k) => k !== "_");
+  const showSummary = errors._ && !Object.keys(errors).some((k) => k !== '_');
 
   return (
     <form onSubmit={onSubmit} className={ui.form} noValidate>
@@ -216,7 +251,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               maxLength={50}
               required
             />
-            {fieldError("customer_name")}
+            {fieldError('customer_name')}
           </label>
           <label className={ui.label}>
             <span className="whitespace-nowrap">
@@ -231,7 +266,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               maxLength={20}
               title="Digits, spaces, + ( ) - . only, e.g. +1 (555) 123-4567"
             />
-            {fieldError("customer_phone")}
+            {fieldError('customer_phone')}
           </label>
         </div>
       </Section>
@@ -251,15 +286,15 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               onClick={() => setCategory(c)}
               className={`min-h-11 rounded-full border-[1.5px] px-4 text-sm font-semibold ${
                 category === c
-                  ? "border-brand bg-brand-soft text-brand-ink"
-                  : "border-line-strong bg-surface hover:bg-canvas"
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-line-strong bg-surface hover:bg-canvas'
               }`}
             >
               {CATEGORY_LABEL[c]}
             </button>
           ))}
         </div>
-        {fieldError("category")}
+        {fieldError('category')}
         <label className={ui.label}>
           Problem, as the customer describes it
           <textarea
@@ -270,7 +305,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
             placeholder="e.g. The AC is blowing warm air since last night"
             required
           />
-          {fieldError("description")}
+          {fieldError('description')}
         </label>
         {editing && (
           <label className={ui.label}>
@@ -282,7 +317,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               maxLength={100}
               required
             />
-            {fieldError("title")}
+            {fieldError('title')}
           </label>
         )}
       </Section>
@@ -294,13 +329,14 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
             className={ui.input}
             value={address}
             onChange={(e) => setAddress(e.target.value)}
+            onBlur={checkAddress}
             maxLength={255}
             required
             disabled={locked}
             autoComplete="street-address"
             placeholder="Full address, e.g. 1204 Congress Ave, Austin, TX 78701"
           />
-          {fieldError("address")}
+          {fieldError('address')}
         </label>
         {showZipField && (
           <label className={`${ui.label} max-w-48`}>
@@ -309,16 +345,27 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               className={ui.input}
               value={postalCode}
               onChange={(e) => setPostalCode(e.target.value)}
+              onBlur={checkAddress}
               maxLength={10}
               inputMode="numeric"
               disabled={locked}
             />
-            {fieldError("postal_code")}
+            {fieldError('postal_code')}
           </label>
         )}
-        <p className={ui.muted}>
-          The map location is found automatically when you save.
-        </p>
+        {editing ? (
+          <p className={ui.muted}>
+            If you change the address, the map location is looked up again when you save.
+          </p>
+        ) : (
+          <AddressStatus
+            check={check}
+            checking={checking}
+            pin={pin}
+            onPick={setPin}
+            office={office}
+          />
+        )}
       </Section>
 
       <Section title="When can we visit?">
@@ -328,8 +375,8 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           aria-label="Timing"
         >
           {[
-            { value: false, label: "Pick a day" },
-            { value: true, label: "Urgent: as soon as possible" },
+            { value: false, label: 'Pick a day' },
+            { value: true, label: 'Urgent: as soon as possible' },
           ].map((o) => (
             <button
               key={o.label}
@@ -340,8 +387,8 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               onClick={() => setUrgent(o.value)}
               className={`min-h-11 rounded-full border-[1.5px] px-4 text-sm font-semibold disabled:opacity-60 ${
                 urgent === o.value
-                  ? "border-brand bg-brand-soft text-brand-ink"
-                  : "border-line-strong bg-surface hover:bg-canvas"
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-line-strong bg-surface hover:bg-canvas'
               }`}
             >
               {o.label}
@@ -364,7 +411,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
                   onChange={(e) => setSlotDate(e.target.value)}
                   disabled={locked}
                 />
-                {fieldError("slot_start")}
+                {fieldError('slot_start')}
               </label>
               <label className={ui.label}>
                 Available from
@@ -385,7 +432,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
                   onChange={(e) => setSlotEnd(e.target.value)}
                   disabled={locked}
                 />
-                {fieldError("slot_end")}
+                {fieldError('slot_end')}
               </label>
             </div>
             <p className={ui.muted}>
@@ -398,17 +445,17 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
 
       <details className="rounded-xl border border-line bg-canvas px-4 py-3">
         <summary className="cursor-pointer text-sm font-semibold">
-          Set automatically: about{" "}
+          Set automatically: about{' '}
           {Number(minutes) >= 60
             ? `${+(Number(minutes) / 60).toFixed(1)} h`
             : `${minutes} min`}
-          ,{" "}
+          ,{' '}
           {skillIds.length === 0
-            ? "no skill chosen"
+            ? 'no skill chosen'
             : skills
                 .filter((s) => skillIds.includes(s.id))
                 .map((s) => s.name)
-                .join(", ")}
+                .join(', ')}
           . Change
         </summary>
         <div className="mt-3 grid gap-4">
@@ -424,7 +471,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               onChange={(e) => setDuration(e.target.value)}
               disabled={locked}
             />
-            {fieldError("estimated_duration_minutes")}
+            {fieldError('estimated_duration_minutes')}
           </label>
           <fieldset className="grid gap-2" disabled={locked}>
             <legend className="mb-1 text-sm font-medium text-ink-muted">
@@ -449,7 +496,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           </fieldset>
         </div>
       </details>
-      {fieldError("skill_ids")}
+      {fieldError('skill_ids')}
 
       {showSummary && !conflict && (
         <p role="alert" className={ui.error}>
@@ -474,7 +521,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
 
       <div className="flex flex-wrap gap-2">
         <button className={ui.btn} disabled={busy}>
-          {busy ? "Saving…" : editing ? "Save changes" : "Create job"}
+          {busy ? 'Saving…' : editing ? 'Save changes' : 'Create job'}
         </button>
         <button type="button" className={ui.btnSmall} onClick={onCancel}>
           Cancel
@@ -498,5 +545,44 @@ function Section({
       </h2>
       {children}
     </section>
+  );
+}
+
+function AddressStatus({
+  check,
+  checking,
+  pin,
+  onPick,
+  office,
+}: {
+  check: AddressCheck | null;
+  checking: boolean;
+  pin: LatLng | null;
+  onPick: (p: LatLng) => void;
+  office: LatLng | null;
+}) {
+  if (checking) return <p className={ui.muted}>Looking up the address…</p>;
+  if (!check) return <p className={ui.muted}>We find the map location as soon as you finish the address.</p>;
+  if (check.status === 'ok' || check.status === 'manual') {
+    return <p className="text-sm font-medium text-brand-ink">✓ Found: {check.label}</p>;
+  }
+  const approximate = check.status === 'approximate';
+  return (
+    <div className="grid gap-2">
+      <p className={ui.notice}>
+        {approximate
+          ? 'We only found the area, not the exact spot.'
+          : 'We could not find this address.'}{' '}
+        {pin
+          ? 'Your pin will be saved with the job.'
+          : 'Check the spelling, or click the map to place the pin yourself. You can also save now and fix it later.'}
+      </p>
+      <PinMap
+        pin={pin ?? (approximate && check.lat != null && check.lng != null ? { lat: check.lat, lng: check.lng } : null)}
+        fallbackCenter={office}
+        onPick={onPick}
+        height={220}
+      />
+    </div>
   );
 }

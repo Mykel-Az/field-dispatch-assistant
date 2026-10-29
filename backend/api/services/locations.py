@@ -12,9 +12,21 @@ from ..models import GeocodeStatus
 logger = logging.getLogger(__name__)
 
 
+_shared = {}
+
+
 def get_geocoder():
-    """The provider named in settings.GEOCODER_CLASS (a dotted path)."""
-    return import_string(settings.GEOCODER_CLASS)()
+    """The provider named in settings.GEOCODER_CLASS (a dotted path).
+
+    A class marked SHARED = True (the cached, throttled Nominatim one) is built
+    once per process, so its cache and throttle survive between requests.
+    """
+    cls = import_string(settings.GEOCODER_CLASS)
+    if getattr(cls, "SHARED", False):
+        if cls not in _shared:
+            _shared[cls] = cls()
+        return _shared[cls]
+    return cls()
 
 
 def locate(obj, geocoder=None):
@@ -48,3 +60,28 @@ def locate(obj, geocoder=None):
         obj.geocode_status = result.status
         obj.location_label = result.label
     return obj
+
+
+def lookup(address, postal_code, geocoder=None):
+    """Look an address up without touching any record (the form's "check address").
+
+    Returns {"status", "lat", "lng", "label"}; status is "failed" when nothing
+    was found or the provider is down. Never raises.
+    """
+    probe = locate(_Probe(address, postal_code), geocoder)
+    return {
+        "status": probe.geocode_status,
+        "lat": probe.lat,
+        "lng": probe.lng,
+        "label": probe.location_label,
+    }
+
+
+class _Probe:
+    """Just enough of an address-bearing object for locate()."""
+
+    def __init__(self, address, postal_code):
+        self.address, self.postal_code = address, postal_code
+        self.lat = self.lng = None
+        self.geocode_status = GeocodeStatus.PENDING
+        self.location_label = ""

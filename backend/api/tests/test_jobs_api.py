@@ -46,7 +46,9 @@ def test_create_uses_category_default_skills_and_writes_history(dispatcher_a):
     assert data["status"] == "unassigned" and data["version"] == 1
     assert data["scheduled_date"] == "2026-11-02"
     assert data["geocode_status"] == "ok" and data["location_label"]
-    assert "lat" not in data and "lng" not in data
+    assert (
+        data["lat"] is not None and data["lng"] is not None
+    )  # the location panel draws it
     [row] = data["history"]
     assert (row["from_status"], row["to_status"]) == ("", "unassigned")
     assert row["changed_by"]["id"] == dispatcher_a.pk
@@ -541,3 +543,120 @@ def test_unassign_an_ongoing_job_is_a_409(dispatcher_a, org_a, technician_a):
         f"/api/jobs/{job.pk}/unassign/", {"version": job.version}, format="json"
     )
     assert response.status_code == 409
+
+
+# ---- address lookup, manual pin, retry --------------------------------------
+def lookup(user, **data):
+    return client_for(user).post("/api/geocode/lookup/", data, format="json")
+
+
+def test_lookup_finds_an_address(dispatcher_a):
+    response = lookup(dispatcher_a, address="1204 Congress Ave", postal_code="78701")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok" and data["lat"] and data["lng"]
+
+
+def test_lookup_reports_not_found_as_failed_not_an_error(dispatcher_a):
+    data = lookup(dispatcher_a, address="unfindable road", postal_code="78701").json()
+    assert data == {"status": "failed", "lat": None, "lng": None, "label": ""}
+
+
+def test_lookup_survives_a_provider_failure(dispatcher_a):
+    response = lookup(dispatcher_a, address="boom street", postal_code="78701")
+    assert response.status_code == 200 and response.json()["status"] == "failed"
+
+
+def test_lookup_needs_something_to_look_up(dispatcher_a):
+    assert lookup(dispatcher_a, address="", postal_code="").status_code == 400
+
+
+def test_lookup_is_for_dispatchers_only(technician_a):
+    assert lookup(technician_a, address="1 Main St").status_code == 403
+    assert APIClient().post("/api/geocode/lookup/", {"address": "x"}).status_code == 401
+
+
+def pin(user, job, lat=30.27, lng=-97.74, version=None):
+    return client_for(user).post(
+        f"/api/jobs/{job.pk}/location/",
+        {
+            "lat": lat,
+            "lng": lng,
+            "version": job.version if version is None else version,
+        },
+        format="json",
+    )
+
+
+def test_pin_fixes_a_job_whose_address_failed(dispatcher_a, org_a):
+    job = make_job(org_a, geocode_status="failed", lat=None, lng=None)
+    response = pin(dispatcher_a, job)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["geocode_status"] == "manual" and data["version"] == job.version + 1
+    job.refresh_from_db()
+    assert (job.lat, job.lng) == (30.27, -97.74)
+
+
+def test_a_pinned_job_can_then_be_assigned(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, geocode_status="failed", lat=None, lng=None)
+    pinned = pin(dispatcher_a, job).json()
+    job.refresh_from_db()
+    assert pinned["status"] == "unassigned"
+    assert assign(dispatcher_a, job, technician_a).status_code == 200
+
+
+@pytest.mark.parametrize(("lat", "lng"), [(91, 0), (-91, 0), (0, 181), (0, -181)])
+def test_pin_rejects_impossible_coordinates(dispatcher_a, org_a, lat, lng):
+    assert pin(dispatcher_a, make_job(org_a), lat=lat, lng=lng).status_code == 400
+
+
+def test_pin_with_a_stale_version_is_a_409(dispatcher_a, org_a):
+    job = make_job(org_a)
+    response = pin(dispatcher_a, job, version=job.version + 3)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "stale_version"
+
+
+def test_pin_is_refused_once_the_job_is_planned(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, status="assigned", technician=technician_of(technician_a))
+    response = pin(dispatcher_a, job)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "job_not_editable"
+
+
+def retry(user, job, version=None):
+    return client_for(user).post(
+        f"/api/jobs/{job.pk}/retry-geocode/",
+        {"version": job.version if version is None else version},
+        format="json",
+    )
+
+
+def test_retry_geocode_recovers_a_failed_job(dispatcher_a, org_a):
+    job = make_job(
+        org_a, address="1 Main St", geocode_status="failed", lat=None, lng=None
+    )
+    data = retry(dispatcher_a, job).json()
+    assert data["geocode_status"] == "ok"
+
+
+def test_retry_geocode_can_fail_again_without_an_error(dispatcher_a, org_a):
+    job = make_job(org_a, address="boom street")
+    response = retry(dispatcher_a, job)
+    assert response.status_code == 200
+    assert response.json()["geocode_status"] == "failed"
+
+
+def test_retry_geocode_with_a_stale_version_is_a_409(dispatcher_a, org_a):
+    job = make_job(org_a)
+    assert retry(dispatcher_a, job, version=job.version + 2).status_code == 409
+
+
+def test_detail_has_coordinates_but_the_list_does_not(dispatcher_a, org_a):
+    job = make_job(org_a, lat=30.1, lng=-97.5)
+    client = client_for(dispatcher_a)
+    detail = client.get(f"/api/jobs/{job.pk}/").json()
+    assert (detail["lat"], detail["lng"]) == (30.1, -97.5)
+    row = client.get("/api/jobs/").json()["results"][0]
+    assert "lat" not in row and "lng" not in row
