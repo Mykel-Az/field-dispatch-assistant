@@ -21,6 +21,8 @@ OBJECT_ID_FOR = {
     ),
     "/api/jobs/{pk}/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/cancel/": lambda owner: make_job(owner.organization).pk,
+    "/api/jobs/{pk}/assign/": lambda owner: make_job(owner.organization).pk,
+    "/api/jobs/{pk}/unassign/": lambda owner: make_job(owner.organization).pk,
 }
 UNSAFE_BODY = {"full_name": "x", "new_password": "An0ther-long-phrase!"}
 

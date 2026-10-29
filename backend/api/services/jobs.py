@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from dispatch_engine import lifecycle as lc
 
+from ..exceptions import Conflict
 from ..models import Job, JobStatus, JobStatusHistory, Skill
 from ..versioning import check_and_bump_version
 from .locations import locate
@@ -117,15 +118,22 @@ def update_job(*, job, client_version, skills=None, **changes):
     return locked
 
 
-def transition(job, to, actor, reason="", *, technician=None):
+def transition(job, to, actor, reason="", *, technician=None, client_version=None):
     """The only place a job's status changes.
 
     Checks the lifecycle table, updates the job and writes exactly one history
     row, all in one transaction. Returns the fresh, locked job. `technician` is
-    required when moving to Assigned (the database insists on it).
+    required when moving to Assigned (the database insists on it). When
+    `client_version` is given (a person acting on a screen), it must still be the
+    job's current version, otherwise 409 stale_version.
     """
     with transaction.atomic():
         locked = Job.objects.select_for_update().get(pk=job.pk)
+        if client_version is not None and client_version != locked.version:
+            raise Conflict(
+                "This job was changed by someone else. Reload it.",
+                code="stale_version",
+            )
         src = locked.status
         try:
             lc.JobLifecycleEngine.check_transition(src, to)

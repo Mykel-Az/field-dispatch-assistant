@@ -27,11 +27,13 @@ from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
     HealthSerializer,
+    JobAssignSerializer,
     JobCancelSerializer,
     JobCreateSerializer,
     JobDetailSerializer,
     JobFilterSerializer,
     JobSerializer,
+    JobUnassignSerializer,
     JobUpdateSerializer,
     LoginSerializer,
     OrganizationSerializer,
@@ -411,3 +413,61 @@ class JobViewSet(
                 f"A {job.status} job cannot be canceled.", code="illegal_transition"
             ) from None
         return self._detail(canceled)
+
+    @extend_schema(request=JobAssignSerializer, responses=JobDetailSerializer)
+    @action(detail=True, methods=["post"])
+    def assign(self, request, pk=None):
+        """Manually give an unassigned job to a technician (the planner will do this
+        automatically later; a dispatcher can always override it)."""
+        job = self.get_object()
+        serializer = JobAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        technician = (
+            Technician.objects.for_organization(request.user.organization)
+            .select_related("user")
+            .filter(pk=serializer.validated_data["technician_id"])
+            .first()
+        )
+        if technician is None:
+            raise ValidationError({"technician_id": "Unknown technician."})
+        if not technician.user.is_active:
+            raise Conflict(
+                "That technician is deactivated.", code="technician_inactive"
+            )
+        try:
+            updated = job_service.transition(
+                job,
+                "assigned",
+                request.user,
+                technician=technician,
+                client_version=serializer.validated_data["version"],
+            )
+        except job_service.IllegalJobTransition:
+            raise Conflict(
+                f"A {job.status} job cannot be assigned.", code="illegal_transition"
+            ) from None
+        except job_service.LocationRequired:
+            raise Conflict(
+                "Set the job's location before assigning it.", code="location_required"
+            ) from None
+        return self._detail(updated)
+
+    @extend_schema(request=JobUnassignSerializer, responses=JobDetailSerializer)
+    @action(detail=True, methods=["post"])
+    def unassign(self, request, pk=None):
+        """Take an assigned job back to the unassigned queue."""
+        job = self.get_object()
+        serializer = JobUnassignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            updated = job_service.transition(
+                job,
+                "unassigned",
+                request.user,
+                client_version=serializer.validated_data["version"],
+            )
+        except job_service.IllegalJobTransition:
+            raise Conflict(
+                f"A {job.status} job cannot be unassigned.", code="illegal_transition"
+            ) from None
+        return self._detail(updated)
