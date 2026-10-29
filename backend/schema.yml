@@ -132,6 +132,183 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
           description: ''
+  /api/jobs/:
+    get:
+      operationId: jobs_list
+      description: |-
+        Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+        stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: scheduled_date
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: status
+        schema:
+          enum:
+          - unassigned
+          - assigned
+          - ongoing
+          - completed
+          - incomplete
+          - failed
+          - canceled
+          type: string
+          minLength: 1
+        description: |-
+          * `unassigned` - Unassigned
+          * `assigned` - Assigned
+          * `ongoing` - Ongoing
+          * `completed` - Completed
+          * `incomplete` - Incomplete
+          * `failed` - Failed
+          * `canceled` - Canceled
+      - in: query
+        name: technician
+        schema:
+          type: integer
+          minimum: 1
+      tags:
+      - jobs
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedJobList'
+          description: ''
+    post:
+      operationId: jobs_create
+      description: |-
+        Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+        stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobCreate'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/jobs/{id}/:
+    get:
+      operationId: jobs_retrieve
+      description: |-
+        Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+        stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+    patch:
+      operationId: jobs_partial_update
+      description: |-
+        Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+        stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedJobUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedJobUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedJobUpdate'
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/jobs/{id}/cancel/:
+    post:
+      operationId: jobs_cancel_create
+      description: |-
+        Dispatchers and heads manage jobs. There is no DELETE: terminal jobs
+        stay for the audit trail. Technicians get their own endpoint in Sprint 2.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobCancel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobCancel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobCancel'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobDetail'
+          description: ''
   /api/organization/:
     get:
       operationId: organization_retrieve
@@ -440,6 +617,16 @@ paths:
           description: No response body
 components:
   schemas:
+    CategoryEnum:
+      enum:
+      - hvac
+      - electrical
+      - appliance
+      type: string
+      description: |-
+        * `hvac` - HVAC
+        * `electrical` - Electrical
+        * `appliance` - Appliance repair
     ChangePassword:
       type: object
       properties:
@@ -473,6 +660,288 @@ components:
           type: string
       required:
       - status
+    Job:
+      type: object
+      description: 'The list row. No lat/lng on purpose: nobody types or reads coordinates.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          readOnly: true
+        postal_code:
+          type: string
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryEnum'
+          readOnly: true
+        is_urgent:
+          type: boolean
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+          default: unassigned
+        technician:
+          allOf:
+          - $ref: '#/components/schemas/JobTechnician'
+          readOnly: true
+        scheduled_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        slot_start:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        slot_end:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        geocode_status:
+          allOf:
+          - $ref: '#/components/schemas/GeocodeStatusEnum'
+          readOnly: true
+        location_label:
+          type: string
+          readOnly: true
+      required:
+      - address
+      - category
+      - customer_name
+      - geocode_status
+      - id
+      - is_urgent
+      - location_label
+      - postal_code
+      - scheduled_date
+      - slot_end
+      - slot_start
+      - status
+      - technician
+      - title
+    JobCancel:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+      required:
+      - reason
+    JobCreate:
+      type: object
+      description: POST /jobs/. No organization, status, technician, version or lat/lng.
+      properties:
+        title:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        customer_name:
+          type: string
+          maxLength: 50
+        customer_phone:
+          nullable: true
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9\s().-]{7,20}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        is_urgent:
+          type: boolean
+        address:
+          type: string
+          maxLength: 255
+        postal_code:
+          type: string
+          maxLength: 10
+        slot_start:
+          type: string
+          format: date-time
+          nullable: true
+        slot_end:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_duration_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 1
+        skill_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - address
+      - category
+      - customer_name
+      - postal_code
+      - title
+    JobDetail:
+      type: object
+      description: 'The list row. No lat/lng on purpose: nobody types or reads coordinates.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
+        address:
+          type: string
+          readOnly: true
+        postal_code:
+          type: string
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryEnum'
+          readOnly: true
+        is_urgent:
+          type: boolean
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StatusEnum'
+          readOnly: true
+          default: unassigned
+        technician:
+          allOf:
+          - $ref: '#/components/schemas/JobTechnician'
+          readOnly: true
+        scheduled_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        slot_start:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        slot_end:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        geocode_status:
+          allOf:
+          - $ref: '#/components/schemas/GeocodeStatusEnum'
+          readOnly: true
+        location_label:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        customer_phone:
+          type: string
+          readOnly: true
+          nullable: true
+        estimated_duration_minutes:
+          type: integer
+          readOnly: true
+        acceptable_skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillBrief'
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobHistory'
+          readOnly: true
+      required:
+      - acceptable_skills
+      - address
+      - category
+      - created_at
+      - customer_name
+      - customer_phone
+      - description
+      - estimated_duration_minutes
+      - geocode_status
+      - history
+      - id
+      - is_urgent
+      - location_label
+      - postal_code
+      - scheduled_date
+      - slot_end
+      - slot_start
+      - status
+      - technician
+      - title
+      - version
+    JobHistory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        from_status:
+          type: string
+          readOnly: true
+        to_status:
+          allOf:
+          - $ref: '#/components/schemas/ToStatusEnum'
+          readOnly: true
+        reason:
+          type: string
+          readOnly: true
+        changed_by:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - changed_by
+      - created_at
+      - from_status
+      - id
+      - reason
+      - to_status
+    JobTechnician:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - full_name
+      - id
     Login:
       type: object
       properties:
@@ -561,6 +1030,29 @@ components:
       required:
       - id
       - name
+    PaginatedJobList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
     PaginatedUserList:
       type: object
       required:
@@ -584,6 +1076,56 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/User'
+    PatchedJobUpdate:
+      type: object
+      description: PATCH /jobs/{id}/. `version` is required. Status and technician
+        never change here.
+      properties:
+        title:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        customer_name:
+          type: string
+          maxLength: 50
+        customer_phone:
+          nullable: true
+          oneOf:
+          - type: string
+            pattern: ^\+?[0-9\s().-]{7,20}$
+            maxLength: 20
+          - type: string
+            maxLength: 0
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        is_urgent:
+          type: boolean
+        address:
+          type: string
+          maxLength: 255
+        postal_code:
+          type: string
+          maxLength: 10
+        slot_start:
+          type: string
+          format: date-time
+          nullable: true
+        slot_end:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_duration_minutes:
+          type: integer
+          maximum: 1440
+          minimum: 1
+        skill_ids:
+          type: array
+          items:
+            type: integer
+        version:
+          type: integer
+          minimum: 1
     PatchedOrganization:
       type: object
       properties:
@@ -730,6 +1272,18 @@ components:
       required:
       - id
       - name
+    SkillBrief:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - name
     StaffCreate:
       type: object
       description: Input for POST /users/. There is deliberately no `organization`
@@ -753,6 +1307,24 @@ components:
       - full_name
       - password
       - role
+    StatusEnum:
+      enum:
+      - unassigned
+      - assigned
+      - ongoing
+      - completed
+      - incomplete
+      - failed
+      - canceled
+      type: string
+      description: |-
+        * `unassigned` - Unassigned
+        * `assigned` - Assigned
+        * `ongoing` - Ongoing
+        * `completed` - Completed
+        * `incomplete` - Incomplete
+        * `failed` - Failed
+        * `canceled` - Canceled
     TechnicianDetail:
       type: object
       properties:
@@ -804,6 +1376,24 @@ components:
       - shift_end
       - shift_start
       - skill_ids
+    ToStatusEnum:
+      enum:
+      - unassigned
+      - assigned
+      - ongoing
+      - completed
+      - incomplete
+      - failed
+      - canceled
+      type: string
+      description: |-
+        * `unassigned` - Unassigned
+        * `assigned` - Assigned
+        * `ongoing` - Ongoing
+        * `completed` - Completed
+        * `incomplete` - Incomplete
+        * `failed` - Failed
+        * `canceled` - Canceled
     User:
       type: object
       properties:

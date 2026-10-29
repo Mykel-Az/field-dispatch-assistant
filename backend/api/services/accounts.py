@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 
-from ..models import Organization, Technician
+from ..models import Job, JobStatus, Organization, Technician
+from .jobs import release_assigned_jobs
 
 User = get_user_model()
 
@@ -18,6 +19,10 @@ class EmailUnavailableError(AccountError):
 
 class LastHeadError(AccountError):
     code = "last_head"
+
+
+class HasOngoingJobError(AccountError):
+    code = "has_ongoing_job"
 
 
 class CannotChangeOwnPasswordHereError(AccountError):
@@ -98,8 +103,12 @@ def deactivate_user(*, actor, target):
         )
         if not other_heads.exists():
             raise LastHeadError
-    # TIME: when Job exists (S1-3): refuse with 409 has_ongoing_job and return
-    # the technician's Assigned jobs to the queue here, in this transaction.
+    if target.role == User.Role.TECHNICIAN:
+        technician = Technician.objects.get(user=target)
+        # Refuse before touching anything; the whole function is one transaction.
+        if Job.objects.filter(technician=technician, status=JobStatus.ONGOING).exists():
+            raise HasOngoingJobError
+        release_assigned_jobs(technician, actor)
     target.is_active = False
     target.save(update_fields=["is_active"])
     return target

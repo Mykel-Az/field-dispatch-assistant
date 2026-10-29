@@ -23,6 +23,10 @@ MATRIX = [
      {ANON: 401, TECH: 403, DISP: 403, HEAD: 200, SUPER: 403}),
     ("post", "/api/users/", {},
      {ANON: 401, TECH: 403, DISP: 403, HEAD: 400, SUPER: 403}),
+    ("get", "/api/jobs/", None,
+     {ANON: 401, TECH: 403, DISP: 200, HEAD: 200, SUPER: 403}),
+    ("post", "/api/jobs/", {},
+     {ANON: 401, TECH: 403, DISP: 400, HEAD: 400, SUPER: 403}),
 ]  # fmt: skip
 
 
