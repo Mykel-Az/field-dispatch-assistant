@@ -2,6 +2,10 @@ import type { components } from './schema';
 import { get, patch, post } from './http';
 import type {
   CreateUserInput,
+  JobCreateInput,
+  JobDetail,
+  JobRow,
+  JobUpdateInput,
   Organization,
   Page,
   RegisterInput,
@@ -51,3 +55,26 @@ export const updateOrganization = (
 export const fetchTechnicians = () => get<Technician[]>('/technicians/');
 export const updateTechnician = (id: number, input: TechnicianUpdate) =>
   patch<Technician>(`/technicians/${id}/`, input);
+
+// --- jobs (dispatcher and head dispatcher) ---
+export interface JobFilters {
+  status?: string;
+  scheduled_date?: string;
+  technician?: string;
+  page?: number;
+}
+export const fetchJobs = (filters: JobFilters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.status) params.set('status', filters.status);
+  if (filters.scheduled_date) params.set('scheduled_date', filters.scheduled_date);
+  if (filters.technician) params.set('technician', filters.technician);
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page));
+  const qs = params.toString();
+  return get<Page<JobRow>>(`/jobs/${qs ? `?${qs}` : ''}`);
+};
+export const fetchJob = (id: number) => get<JobDetail>(`/jobs/${id}/`);
+export const createJob = (input: JobCreateInput) => post<JobDetail>('/jobs/', input);
+export const updateJob = (id: number, input: JobUpdateInput) =>
+  patch<JobDetail>(`/jobs/${id}/`, input);
+export const cancelJob = (id: number, reason: string) =>
+  post<JobDetail>(`/jobs/${id}/cancel/`, { reason });

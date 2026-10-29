@@ -1,1 +1,106 @@
 @import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/*
+ * Design tokens (direction B: friendly and light).
+ *
+ * Components never use raw colours. They use the semantic utilities below
+ * (bg-canvas, text-ink, bg-brand, bg-st-ongoing-soft ...), which read the CSS
+ * variables in :root. A dark theme is then one extra block that redefines the
+ * variables, with no component changes.
+ *
+ * Status colours are shared by the badges and the map pins. Hues were chosen
+ * to stay apart for colour-blind users, and every status also has its own
+ * glyph (shared/status.ts), so colour is never the only signal.
+ */
+:root {
+  /* surfaces and text */
+  --canvas: #fbf8f3;
+  --surface: #ffffff;
+  --line: #e6dfd3;
+  --line-strong: #8c8374; /* input borders: 3:1 against white */
+  --ink: #2a2622;
+  --ink-muted: #6b635a;
+
+  /* brand */
+  --brand: #0f766e;
+  --brand-hover: #0b5f58;
+  --brand-soft: #d5f0ec;
+  --brand-ink: #0b514c;
+  --on-brand: #ffffff;
+
+  /* feedback */
+  --danger: #b42318;
+  --danger-soft: #fee4e2;
+  --warn-soft: #fef3c7;
+  --warn-ink: #92400e;
+
+  /* job status: soft background, text colour, map-pin fill */
+  --st-unassigned-soft: #ffedd5;
+  --st-unassigned: #c2410c;
+  --st-unassigned-pin: #f97316; /* orange */
+  --st-assigned-soft: #dbeafe;
+  --st-assigned: #1d4ed8;
+  --st-assigned-pin: #2563eb; /* blue */
+  --st-ongoing-soft: #ede9fe;
+  --st-ongoing: #6d28d9;
+  --st-ongoing-pin: #7c3aed; /* purple */
+  --st-completed-soft: #dcfce7;
+  --st-completed: #166534;
+  --st-completed-pin: #15803d; /* green */
+  --st-incomplete-soft: #fef9c3;
+  --st-incomplete: #854d0e;
+  --st-incomplete-pin: #a16207; /* dark gold */
+  --st-failed-soft: #fee2e2;
+  --st-failed: #b91c1c;
+  --st-failed-pin: #b91c1c; /* deep red: darker than the orange pin */
+  --st-canceled-soft: #eef1f5;
+  --st-canceled: #475569;
+  --st-canceled-pin: #64748b; /* slate */
+}
+
+@theme inline {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
+  --color-on-brand: var(--on-brand);
+
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+
+  --color-st-unassigned: var(--st-unassigned);
+  --color-st-unassigned-soft: var(--st-unassigned-soft);
+  --color-st-assigned: var(--st-assigned);
+  --color-st-assigned-soft: var(--st-assigned-soft);
+  --color-st-ongoing: var(--st-ongoing);
+  --color-st-ongoing-soft: var(--st-ongoing-soft);
+  --color-st-completed: var(--st-completed);
+  --color-st-completed-soft: var(--st-completed-soft);
+  --color-st-incomplete: var(--st-incomplete);
+  --color-st-incomplete-soft: var(--st-incomplete-soft);
+  --color-st-failed: var(--st-failed);
+  --color-st-failed-soft: var(--st-failed-soft);
+  --color-st-canceled: var(--st-canceled);
+  --color-st-canceled-soft: var(--st-canceled-soft);
+
+  --radius-card: 1.125rem;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}

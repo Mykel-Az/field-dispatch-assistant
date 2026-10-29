@@ -74,7 +74,7 @@ export default function TechnicianForm({ technician, onDone, onCancel }: Props) 
   const showSummary = errors._ && !Object.keys(errors).some((k) => k !== '_');
 
   return (
-    <form onSubmit={onSubmit} className={`${ui.form} mb-6 rounded-md border border-slate-200 p-4`}>
+    <form onSubmit={onSubmit} className={`${ui.form} mb-6 rounded-xl border border-line p-4`}>
       <h2 className="text-lg font-semibold">
         {editing ? `Edit ${technician.user.full_name}` : 'Add a technician'}
       </h2>
@@ -130,10 +130,10 @@ export default function TechnicianForm({ technician, onDone, onCancel }: Props) 
       )}
 
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium text-slate-700">Skills</legend>
+        <legend className="mb-1 text-sm font-medium text-ink-muted">Skills</legend>
         <div className="flex flex-wrap gap-2">
           {skills.map((s) => (
-            <label key={s.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm">
+            <label key={s.id} className="flex items-center gap-1 rounded-full bg-brand-soft px-3 py-1 text-sm text-brand-ink">
               <input
                 type="checkbox"
                 checked={skillIds.includes(s.id)}

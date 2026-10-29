@@ -4,6 +4,9 @@ import { HomeRedirect, PublicOnly, RequireAuth, RequireRole } from './auth/guard
 import LoginPage from './auth/pages/LoginPage';
 import RegisterPage from './auth/pages/RegisterPage';
 import DashboardPage from './dispatcher/pages/home';
+import JobNewPage from './dispatcher/pages/JobNewPage';
+import JobPage from './dispatcher/pages/JobPage';
+import JobsPage from './dispatcher/pages/JobsPage';
 import OrganizationPage from './dispatcher/pages/OrganizationPage';
 import TechniciansPage from './dispatcher/pages/TechniciansPage';
 import UsersPage from './dispatcher/pages/UsersPage';
@@ -28,6 +31,9 @@ export const router = createBrowserRouter([
         { element: <AppLayout />, children: [
           { element: <RequireRole roles={['head_dispatcher', 'dispatcher']} />, children: [
             { path: '/dashboard', element: <DashboardPage /> },
+            { path: '/jobs', element: <JobsPage /> },
+            { path: '/jobs/new', element: <JobNewPage /> },
+            { path: '/jobs/:id', element: <JobPage /> },
             { path: '/organization', element: <OrganizationPage /> },
             { path: '/technicians', element: <TechniciansPage /> },
           ] },
