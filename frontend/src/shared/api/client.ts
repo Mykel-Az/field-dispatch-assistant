@@ -78,3 +78,7 @@ export const updateJob = (id: number, input: JobUpdateInput) =>
   patch<JobDetail>(`/jobs/${id}/`, input);
 export const cancelJob = (id: number, reason: string) =>
   post<JobDetail>(`/jobs/${id}/cancel/`, { reason });
+export const assignJob = (id: number, technicianId: number, version: number) =>
+  post<JobDetail>(`/jobs/${id}/assign/`, { technician_id: technicianId, version });
+export const unassignJob = (id: number, version: number) =>
+  post<JobDetail>(`/jobs/${id}/unassign/`, { version });

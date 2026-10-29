@@ -7,6 +7,7 @@ import StatusBadge from '../../shared/components/StatusBadge';
 import { formatSlot, formatStamp, placeLine } from '../../shared/jobTime';
 import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
 import { ui } from '../../shared/ui';
+import AssignPanel from '../components/AssignPanel';
 import JobForm from '../components/JobForm';
 
 const FINISHED = new Set(['completed', 'failed', 'canceled']);
@@ -67,7 +68,11 @@ function CancelPanel({ job, onCanceled }: { job: JobDetail; onCanceled: (j: JobD
   }
 
   if (!open) {
-    return <button className={ui.btnDanger} onClick={() => setOpen(true)}>Cancel job</button>;
+    return (
+      <button className={`${ui.btnDanger} justify-self-start`} onClick={() => setOpen(true)}>
+        Cancel job
+      </button>
+    );
   }
   return (
     <form onSubmit={submit} className="grid gap-3 rounded-xl border border-danger/40 p-4">
@@ -188,7 +193,7 @@ export default function JobPage() {
                 </dl>
                 {job.description && (
                   <div className="mt-4">
-                    <div className="text-sm font-medium text-ink-muted">What needs doing</div>
+                    <div className="text-sm font-medium text-ink-muted">Problem, as the customer describes it</div>
                     <p className="mt-0.5 whitespace-pre-line">{job.description}</p>
                   </div>
                 )}
@@ -200,6 +205,10 @@ export default function JobPage() {
               </>
             )}
           </section>
+
+          {!editing && (
+            <AssignPanel job={job} onChanged={(next) => (next ? setJob(next) : void load())} />
+          )}
 
           {!editing && isJobStatus(job.status) && CANCELABLE.has(job.status) && (
             <CancelPanel job={job} onCanceled={setJob} />

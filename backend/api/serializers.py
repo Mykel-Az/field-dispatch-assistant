@@ -489,6 +489,15 @@ class JobCancelSerializer(serializers.Serializer):
     reason = serializers.CharField(max_length=500)
 
 
+class JobAssignSerializer(serializers.Serializer):
+    technician_id = serializers.IntegerField(min_value=1)
+    version = serializers.IntegerField(min_value=1)
+
+
+class JobUnassignSerializer(serializers.Serializer):
+    version = serializers.IntegerField(min_value=1)
+
+
 class JobFilterSerializer(serializers.Serializer):
     """Query string for GET /jobs/. Bad values are a 400, not silently ignored."""
 

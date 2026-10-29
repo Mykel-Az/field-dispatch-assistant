@@ -463,3 +463,81 @@ def test_head_can_do_everything_a_dispatcher_can(head_a, org_a):
         ).status_code
         == 200
     )
+
+
+# ---- assign / unassign by hand ----------------------------------------------
+def assign(user, job, technician, version=None):
+    return client_for(user).post(
+        f"/api/jobs/{job.pk}/assign/",
+        {
+            "technician_id": technician_of(technician).pk,
+            "version": job.version if version is None else version,
+        },
+        format="json",
+    )
+
+
+def test_assign_an_unassigned_job(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a)
+    response = assign(dispatcher_a, job, technician_a)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "assigned" and data["version"] == job.version + 1
+    assert data["technician"]["id"] == technician_of(technician_a).pk
+    assert [h["to_status"] for h in data["history"]] == ["assigned"]
+
+
+def test_assign_with_a_stale_version_is_a_409(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a)
+    response = assign(dispatcher_a, job, technician_a, version=job.version + 5)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "stale_version"
+    job.refresh_from_db()
+    assert job.status == "unassigned"
+
+
+def test_assign_without_a_location_is_a_409(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, geocode_status="failed", lat=None, lng=None)
+    response = assign(dispatcher_a, job, technician_a)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "location_required"
+
+
+def test_assign_a_deactivated_technician_is_a_409(dispatcher_a, org_a, technician_a):
+    technician_a.is_active = False
+    technician_a.save()
+    response = assign(dispatcher_a, make_job(org_a), technician_a)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "technician_inactive"
+
+
+def test_assign_an_already_assigned_job_is_a_409(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, status="assigned", technician=technician_of(technician_a))
+    response = assign(dispatcher_a, job, technician_a)
+    assert response.status_code == 409
+    assert response.data["detail"].code == "illegal_transition"
+
+
+def test_assign_another_organizations_technician_is_a_400(
+    dispatcher_a, org_a, technician_b
+):
+    response = assign(dispatcher_a, make_job(org_a), technician_b)
+    assert response.status_code == 400 and "technician_id" in response.json()
+
+
+def test_unassign_an_assigned_job(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, status="assigned", technician=technician_of(technician_a))
+    response = client_for(dispatcher_a).post(
+        f"/api/jobs/{job.pk}/unassign/", {"version": job.version}, format="json"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "unassigned" and data["technician"] is None
+
+
+def test_unassign_an_ongoing_job_is_a_409(dispatcher_a, org_a, technician_a):
+    job = make_job(org_a, status="ongoing", technician=technician_of(technician_a))
+    response = client_for(dispatcher_a).post(
+        f"/api/jobs/{job.pk}/unassign/", {"version": job.version}, format="json"
+    )
+    assert response.status_code == 409
