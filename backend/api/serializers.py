@@ -2,7 +2,6 @@ import re
 
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
@@ -24,7 +23,7 @@ GENERIC_LOGIN_ERROR = "Invalid email or password."
 class OrganizationSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["id", "name"]
+        fields = ["id", "name", "timezone"]
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -228,6 +227,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "lat",
             "lng",
             "geocode_status",
+            "timezone",
             "work_start",
             "work_end",
             "scoring_strategy",
@@ -369,10 +369,10 @@ class _JobInputMixin:
             )
 
     @staticmethod
-    def _scheduled_date(start):
-        # TIME: dates are UTC. The full-fidelity path is an Organization
-        # timezone, so a 00:30 local slot lands on the right day.
-        return start.date() if start else timezone.localdate()
+    def _scheduled_date(start, organization):
+        """The day the job is for, on the organization's clock (an urgent job
+        with no slot is for today there)."""
+        return job_service.local_date(start, organization.timezone)
 
 
 class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
@@ -419,7 +419,9 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
                 {"skill_ids": "Select at least one skill."}
             )
         attrs["skills"] = skills
-        attrs["scheduled_date"] = self._scheduled_date(start)
+        attrs["scheduled_date"] = self._scheduled_date(
+            start, self.context["request"].user.organization
+        )
         return attrs
 
     def create(self, validated_data):
@@ -481,7 +483,7 @@ class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
         end = attrs.get("slot_end", job.slot_end)
         self._check_slot(start, end, is_urgent)
         if {"slot_start", "slot_end", "is_urgent"} & set(attrs):
-            attrs["scheduled_date"] = self._scheduled_date(start)
+            attrs["scheduled_date"] = self._scheduled_date(start, job.organization)
         if "acceptable_skills" in attrs:
             attrs["skills"] = attrs.pop("acceptable_skills")
         return attrs
@@ -523,9 +525,33 @@ class JobPinSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class MapJobSerializer(serializers.ModelSerializer):
+    """One pin. Deliberately thin: the map polls this, so no text, no history."""
+
+    class Meta:
+        model = Job
+        fields = ["id", "lat", "lng", "status", "technician_id", "is_urgent"]
+        read_only_fields = fields
+
+
 class JobFilterSerializer(serializers.Serializer):
     """Query string for GET /jobs/. Bad values are a 400, not silently ignored."""
 
-    status = serializers.ChoiceField(choices=JobStatus.choices, required=False)
+    # Filters combine (AND). `status` and `technician` may repeat:
+    # ?status=assigned&status=ongoing&technician=3&technician=5.
+    status = serializers.MultipleChoiceField(choices=JobStatus.choices, required=False)
     scheduled_date = serializers.DateField(required=False)
-    technician = serializers.IntegerField(required=False, min_value=1)
+    technician = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), required=False
+    )
+
+    def filter(self, queryset):
+        """Apply the validated filters to a Job queryset."""
+        data = self.validated_data
+        if data.get("status"):
+            queryset = queryset.filter(status__in=data["status"])
+        if "scheduled_date" in data:
+            queryset = queryset.filter(scheduled_date=data["scheduled_date"])
+        if data.get("technician"):
+            queryset = queryset.filter(technician_id__in=data["technician"])
+        return queryset

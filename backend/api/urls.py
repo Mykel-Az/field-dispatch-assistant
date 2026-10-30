@@ -7,6 +7,7 @@ from .views import (
     JobViewSet,
     LoginView,
     LogoutView,
+    MapJobsView,
     MeView,
     OrganizationView,
     RegisterView,
@@ -32,6 +33,7 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="me"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("geocode/lookup/", GeocodeLookupView.as_view(), name="geocode-lookup"),
+    path("map/jobs/", MapJobsView.as_view(), name="map-jobs"),
     path("organization/", OrganizationView.as_view(), name="organization"),
     path("", include(router.urls)),
 ]

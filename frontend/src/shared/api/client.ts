@@ -1,3 +1,4 @@
+import { filterQuery, NO_FILTERS, type JobFilterValues } from '../filters';
 import type { components } from './schema';
 import { get, patch, post } from './http';
 import type {
@@ -57,18 +58,9 @@ export const updateTechnician = (id: number, input: TechnicianUpdate) =>
   patch<Technician>(`/technicians/${id}/`, input);
 
 // --- jobs (dispatcher and head dispatcher) ---
-export interface JobFilters {
-  status?: string;
-  scheduled_date?: string;
-  technician?: string;
-  page?: number;
-}
-export const fetchJobs = (filters: JobFilters = {}) => {
-  const params = new URLSearchParams();
-  if (filters.status) params.set('status', filters.status);
-  if (filters.scheduled_date) params.set('scheduled_date', filters.scheduled_date);
-  if (filters.technician) params.set('technician', filters.technician);
-  if (filters.page && filters.page > 1) params.set('page', String(filters.page));
+export const fetchJobs = (filters: JobFilterValues = NO_FILTERS, page = 1) => {
+  const params = filterQuery(filters);
+  if (page > 1) params.set('page', String(page));
   const qs = params.toString();
   return get<Page<JobRow>>(`/jobs/${qs ? `?${qs}` : ''}`);
 };
@@ -95,3 +87,17 @@ export const pinJob = (id: number, lat: number, lng: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/location/`, { lat, lng, version });
 export const retryGeocode = (id: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/retry-geocode/`, { version });
+
+export interface MapPin {
+  id: number;
+  lat: number;
+  lng: number;
+  status: string;
+  technician_id: number | null;
+  is_urgent: boolean;
+}
+export const fetchMapJobs = (filters: JobFilterValues = NO_FILTERS) => {
+  const params = filterQuery(filters);
+  const qs = params.toString();
+  return get<{ results: MapPin[]; truncated: boolean }>(`/map/jobs/${qs ? `?${qs}` : ''}`);
+};

@@ -71,6 +71,19 @@ class AddressMixin(models.Model):
         abstract = True
 
 
+# US only for now. Jobs are scheduled in the organization's own clock.
+US_TIMEZONES = [
+    ("America/New_York", "Eastern"),
+    ("America/Chicago", "Central"),
+    ("America/Denver", "Mountain"),
+    ("America/Phoenix", "Arizona (no daylight saving)"),
+    ("America/Los_Angeles", "Pacific"),
+    ("America/Anchorage", "Alaska"),
+    ("Pacific/Honolulu", "Hawaii"),
+]
+DEFAULT_TIMEZONE = "America/Chicago"
+
+
 class Organization(AddressMixin, models.Model):
     class ScoringStrategy(models.TextChoices):
         BALANCED = "balanced", "Balanced"
@@ -81,7 +94,10 @@ class Organization(AddressMixin, models.Model):
         max_length=20, blank=True, default="", validators=[phone_validator]
     )
 
-    work_start = models.TimeField(blank=True, null=True)
+    timezone = models.CharField(
+        max_length=40, choices=US_TIMEZONES, default=DEFAULT_TIMEZONE
+    )
+    work_start = models.TimeField(blank=True, null=True)  # in `timezone`
     work_end = models.TimeField(blank=True, null=True)
     scoring_strategy = models.CharField(
         max_length=20, choices=ScoringStrategy.choices, default=ScoringStrategy.BALANCED

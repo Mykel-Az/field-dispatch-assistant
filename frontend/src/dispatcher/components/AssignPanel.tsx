@@ -6,6 +6,7 @@ import {
 } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import type { JobDetail, Technician } from '../../shared/api/models';
+import { notifyJobsChanged } from '../../shared/usePolling';
 import { ui } from '../../shared/ui';
 
 interface Props {
@@ -48,7 +49,9 @@ export default function AssignPanel({ job, onChanged }: Props) {
     setBusy(true);
     setError('');
     try {
-      onChanged(await action());
+      const next = await action();
+      notifyJobsChanged();
+      onChanged(next);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         // Changed under us, or cannot take this action: say why, then refresh the job.

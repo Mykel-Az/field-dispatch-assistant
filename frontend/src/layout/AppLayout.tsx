@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { ROLE_LABEL } from '../shared/api/models';
+import { initOrgTimezone } from '../shared/jobTime';
+import { useOrgTimezone } from '../shared/useOrgTimezone';
 import { ui } from '../shared/ui';
 
 const link = ({ isActive }: { isActive: boolean }) =>
@@ -11,7 +13,10 @@ const link = ({ isActive }: { isActive: boolean }) =>
 export default function AppLayout() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  useOrgTimezone(); // re-render the layout (and its pages) when the zone changes
   if (!user) return null;
+  // Set before the pages render, so their first paint already uses the org's clock.
+  initOrgTimezone(user.organization.timezone);
   const staff = user.role !== 'technician';
 
   return (
@@ -24,6 +29,7 @@ export default function AppLayout() {
         <nav className="order-last flex w-full flex-nowrap gap-1.5 overflow-x-auto sm:order-none sm:w-auto sm:flex-1 sm:flex-wrap sm:overflow-visible">
           {staff && <NavLink to="/dashboard" className={link}>Dashboard</NavLink>}
           {staff && <NavLink to="/jobs" className={link}>Jobs</NavLink>}
+          {staff && <NavLink to="/map" className={link}>Map</NavLink>}
           {!staff && <NavLink to="/tech" className={link}>My jobs</NavLink>}
           {staff && <NavLink to="/technicians" className={link}>Technicians</NavLink>}
           {staff && <NavLink to="/organization" className={link}>Organization</NavLink>}

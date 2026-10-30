@@ -12,7 +12,7 @@ export interface User {
   full_name: string;
   role: Role;
   is_active: boolean;
-  organization: { id: number; name: string };
+  organization: { id: number; name: string; timezone: string };
 }
 
 export interface SkillRef {
@@ -54,6 +54,7 @@ export interface Organization {
   lat: number | null;
   lng: number | null;
   geocode_status: 'pending' | 'manual' | 'ok' | 'failed';
+  timezone: string;
   work_start: string | null; // "HH:MM:SS"
   work_end: string | null;
   scoring_strategy: string;
@@ -112,3 +113,16 @@ export const CATEGORY_DEFAULT_MINUTES: Record<JobCategory, number> = {
   electrical: 90,
   appliance: 60,
 };
+
+// US only for now. Keep in step with api.models.US_TIMEZONES.
+export const US_TIMEZONES: { value: string; label: string }[] = [
+  { value: 'America/New_York', label: 'Eastern' },
+  { value: 'America/Chicago', label: 'Central' },
+  { value: 'America/Denver', label: 'Mountain' },
+  { value: 'America/Phoenix', label: 'Arizona (no daylight saving)' },
+  { value: 'America/Los_Angeles', label: 'Pacific' },
+  { value: 'America/Anchorage', label: 'Alaska' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii' },
+];
+export const timezoneLabel = (tz: string) =>
+  US_TIMEZONES.find((z) => z.value === tz)?.label ?? tz;
