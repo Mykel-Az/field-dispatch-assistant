@@ -26,7 +26,7 @@ jobs:
       - name: Production settings build (collectstatic) and deploy check
         env:
           DJANGO_SETTINGS_MODULE: config.settings.prod
-          SECRET_KEY: ci-only-not-a-secret-ci-only-not-a-secret-ci-only
+          SECRET_KEY: ci-only-not-a-real-secret-0123456789-abcdefghijklmnopqrstuvwxyz
           DATABASE_URL: sqlite:///ci.db
           ALLOWED_HOSTS: example.onrender.com
           CSRF_TRUSTED_ORIGINS: https://example.onrender.com
