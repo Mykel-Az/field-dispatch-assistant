@@ -10,6 +10,23 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600, ssl_require=Tru
 STATIC_ROOT = BASE_DIR / "staticfiles"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", [])
+# The SPA calls the API same-origin through Render's /api rewrite (ADR-015), so no
+# other origin needs CORS in production. Set CORS_ALLOWED_ORIGINS only if that changes.
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", [])
+
+# The app sends no email. Say so explicitly, so `check --deploy` stays quiet and a
+# stray send fails loudly instead of printing to a log nobody reads.
+MAILERS = {"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend"}}
+
+# HTTPS. Render terminates TLS and forwards X-Forwarded-Proto (SECURE_PROXY_SSL_HEADER).
+# Switch the redirect off with SECURE_SSL_REDIRECT=false in Render if it ever
+# misbehaves, no redeploy needed. The health check stays reachable over plain http.
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "true").lower() == "true"
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600"))  # raise once stable
+# Deliberately not set: we do not own onrender.com, so telling browsers to force HTTPS
+# on every subdomain, or to preload it, would be wrong. Silenced on purpose.
+SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
 
 MIDDLEWARE.insert(2, "whitenoise.middleware.WhiteNoiseMiddleware")
 

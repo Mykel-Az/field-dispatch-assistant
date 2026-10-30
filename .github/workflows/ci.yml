@@ -23,6 +23,16 @@ jobs:
       - run: python manage.py makemigrations --check --dry-run
       - run: ruff check . && ruff format --check .
       - run: lint-imports
+      - name: Production settings build (collectstatic) and deploy check
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          SECRET_KEY: ci-only-not-a-secret-ci-only-not-a-secret-ci-only
+          DATABASE_URL: sqlite:///ci.db
+          ALLOWED_HOSTS: example.onrender.com
+          CSRF_TRUSTED_ORIGINS: https://example.onrender.com
+        run: |
+          python manage.py collectstatic --noinput
+          python manage.py check --deploy --fail-level WARNING
       - run: pytest
   frontend:
     runs-on: ubuntu-latest

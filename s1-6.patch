@@ -1,0 +1,164 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 368302b..4d2dc8a 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -23,6 +23,16 @@ jobs:
+       - run: python manage.py makemigrations --check --dry-run
+       - run: ruff check . && ruff format --check .
+       - run: lint-imports
++      - name: Production settings build (collectstatic) and deploy check
++        env:
++          DJANGO_SETTINGS_MODULE: config.settings.prod
++          SECRET_KEY: ci-only-not-a-secret-ci-only-not-a-secret-ci-only
++          DATABASE_URL: sqlite:///ci.db
++          ALLOWED_HOSTS: example.onrender.com
++          CSRF_TRUSTED_ORIGINS: https://example.onrender.com
++        run: |
++          python manage.py collectstatic --noinput
++          python manage.py check --deploy --fail-level WARNING
+       - run: pytest
+   frontend:
+     runs-on: ubuntu-latest
+diff --git a/backend/.gitignore b/backend/.gitignore
+index 399ef87..504b106 100644
+--- a/backend/.gitignore
++++ b/backend/.gitignore
+@@ -183,4 +183,8 @@ cython_debug/
+ 
+ # Folders
+ 
+-/staticfiles/
+\ No newline at end of file
++/staticfiles/
++
++# collectstatic output (built on deploy)
++/config/staticfiles/
++/staticfiles/
+diff --git a/backend/api/tests/test_https.py b/backend/api/tests/test_https.py
+new file mode 100644
+index 0000000..425148e
+--- /dev/null
++++ b/backend/api/tests/test_https.py
+@@ -0,0 +1,31 @@
++"""Behind Render's proxy: plain http is redirected to https, except the health check.
++
++The test settings leave the redirect off, so these tests switch on the same
++settings config/settings/prod.py uses.
++"""
++
++import pytest
++from django.test import Client
++
++
++@pytest.fixture
++def prod_https(settings):
++    settings.SECURE_SSL_REDIRECT = True
++    settings.SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
++    settings.SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
++    settings.ALLOWED_HOSTS = ["testserver"]
++
++
++def test_http_requests_are_redirected_to_https(prod_https):
++    response = Client().get("/api/skills/")
++    assert response.status_code == 301
++    assert response["Location"].startswith("https://")
++
++
++def test_the_health_check_answers_over_plain_http(prod_https):
++    assert Client().get("/api/health/").status_code == 200
++
++
++def test_requests_the_proxy_marks_as_https_are_not_redirected(prod_https):
++    response = Client().get("/api/skills/", HTTP_X_FORWARDED_PROTO="https")
++    assert response.status_code == 401  # reached the API: signed-out, not redirected
+diff --git a/backend/config/settings/prod.py b/backend/config/settings/prod.py
+index 560a689..bb0db05 100644
+--- a/backend/config/settings/prod.py
++++ b/backend/config/settings/prod.py
+@@ -10,6 +10,23 @@ DATABASES = {"default": dj_database_url.config(conn_max_age=600, ssl_require=Tru
+ STATIC_ROOT = BASE_DIR / "staticfiles"
+ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+ CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", [])
++# The SPA calls the API same-origin through Render's /api rewrite (ADR-015), so no
++# other origin needs CORS in production. Set CORS_ALLOWED_ORIGINS only if that changes.
++CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", [])
++
++# The app sends no email. Say so explicitly, so `check --deploy` stays quiet and a
++# stray send fails loudly instead of printing to a log nobody reads.
++MAILERS = {"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend"}}
++
++# HTTPS. Render terminates TLS and forwards X-Forwarded-Proto (SECURE_PROXY_SSL_HEADER).
++# Switch the redirect off with SECURE_SSL_REDIRECT=false in Render if it ever
++# misbehaves, no redeploy needed. The health check stays reachable over plain http.
++SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "true").lower() == "true"
++SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
++SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "3600"))  # raise once stable
++# Deliberately not set: we do not own onrender.com, so telling browsers to force HTTPS
++# on every subdomain, or to preload it, would be wrong. Silenced on purpose.
++SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
+ 
+ MIDDLEWARE.insert(2, "whitenoise.middleware.WhiteNoiseMiddleware")
+ 
+diff --git a/docs/deployment.md b/docs/deployment.md
+new file mode 100644
+index 0000000..1617143
+--- /dev/null
++++ b/docs/deployment.md
+@@ -0,0 +1,57 @@
++# Deployment checklist (Render + Neon)
++
++What to set on Render, and how to prove it works. The app is one backend web
++service plus one static site; the static site proxies `/api/*` to the backend
++(ADR-014, ADR-015), so the browser only ever talks to the frontend origin.
++
++## Backend web service
++
++| Setting | Value |
++|---|---|
++| Build command | `pip install -r requirements.txt && python manage.py collectstatic --noinput` |
++| Start command | `python manage.py migrate && python manage.py createcachetable && gunicorn config.wsgi` |
++| Root directory | `backend` |
++
++`DJANGO_SETTINGS_MODULE=config.settings.prod` selects the production settings.
++
++| Environment variable | Value |
++|---|---|
++| `DJANGO_SETTINGS_MODULE` | `config.settings.prod` |
++| `SECRET_KEY` | a long random string (never the dev one) |
++| `DATABASE_URL` | the Neon connection string |
++| `ALLOWED_HOSTS` | `field-dispatch-assistant.onrender.com,field-dispatch-assistant-1.onrender.com` (the backend host, and the frontend host in case the rewrite forwards its Host header) |
++| `CSRF_TRUSTED_ORIGINS` | `https://field-dispatch-assistant-1.onrender.com` (the **frontend** origin, with `https://`: that is the `Origin` the browser sends) |
++| `CORS_ALLOWED_ORIGINS` | leave unset (same-origin through the rewrite, so CORS is not used) |
++| `NUM_PROXIES` | `1` (confirm with the S1-1e spike) |
++| `GEOCODER_CLASS` | `geocoding.nominatim.CachedNominatimGeocoder` |
++| `NOMINATIM_USER_AGENT` | `FieldDispatch/1.0 (your-email)`, required by the Nominatim usage policy |
++| `SECURE_SSL_REDIRECT` | unset (on). Set `false` only to switch the redirect off if it misbehaves |
++
++## Check it after a deploy
++
++```bash
++API=https://field-dispatch-assistant-1.onrender.com/api   # through the frontend, like a browser
++
++curl -si $API/health/ | head -1                           # 200
++curl -si -c jar $API/auth/csrf/ | grep -i set-cookie      # csrftoken cookie arrives through the rewrite
++TOKEN=$(grep csrftoken jar | awk '{print $7}')
++curl -si -b jar -H "X-CSRFToken: $TOKEN" -H "Origin: https://field-dispatch-assistant-1.onrender.com" \
++  -H "Content-Type: application/json" -d '{"email":"x","password":"y"}' $API/auth/login/ | head -1
++#   400 or 401 = CSRF passed and the login was refused. 403 = CSRF_TRUSTED_ORIGINS is wrong.
++curl -si http://field-dispatch-assistant.onrender.com/api/skills/ | head -3   # 301 to https
++```
++
++In the browser: sign in, reload (session survives), open the Map (tiles load,
++pins appear), create a job (address is looked up).
++
++Static files: `/api/docs/` (Swagger) and `/admin/` should be styled, not bare HTML.
++That proves Whitenoise and `collectstatic` ran.
++
++## Developer setup
++
++```bash
++pip install pre-commit && pre-commit install   # ruff check + format run before every commit
++```
++
++CI (`.github/workflows/ci.yml`) also runs `collectstatic` and `check --deploy`
++against the production settings, so a broken deploy configuration fails the PR.
