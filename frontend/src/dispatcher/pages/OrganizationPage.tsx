@@ -2,17 +2,18 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../../auth/useAuth';
 import { fetchOrganization, updateOrganization } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
-import type { Organization } from '../../shared/api/models';
+import { US_TIMEZONES, type Organization } from '../../shared/api/models';
+import { setOrgTimezone } from '../../shared/jobTime';
 import { ui } from '../../shared/ui';
 
 const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '');
 const num = (s: string) => (s.trim() === '' ? null : Number(s));
 
 export default function OrganizationPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const canEdit = user?.role === 'head_dispatcher';
   const [org, setOrg] = useState<Organization | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', lat: '', lng: '', work_start: '', work_end: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', lat: '', lng: '', work_start: '', work_end: '', timezone: 'America/Chicago' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,7 +23,7 @@ export default function OrganizationPage() {
     setForm({
       name: o.name, email: o.email ?? '', phone: o.phone ?? '', address: o.address ?? '',
       lat: o.lat === null ? '' : String(o.lat), lng: o.lng === null ? '' : String(o.lng),
-      work_start: hhmm(o.work_start), work_end: hhmm(o.work_end),
+      work_start: hhmm(o.work_start), work_end: hhmm(o.work_end), timezone: o.timezone,
     });
   }
 
@@ -47,8 +48,12 @@ export default function OrganizationPage() {
         lng: num(form.lng),
         work_start: form.work_start || null,
         work_end: form.work_end || null,
+        timezone: form.timezone,
       });
       apply(saved);
+      setOrgTimezone(saved.timezone); // every screen redraws its times on the new clock
+      // Keep the signed-in user's copy in step, or the next render would restore the old zone.
+      await refreshUser().catch(() => undefined);
       setMessage('Saved.');
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -89,6 +94,22 @@ export default function OrganizationPage() {
           {f('lng', 'Longitude', 'number', { step: 'any', min: -180, max: 180 })}
         </div>
         <p className={ui.muted}>Location status: {org.geocode_status}. Coordinates entered here are saved as “manual”.</p>
+        <label className={ui.label}>
+          Time zone
+          <select
+            className={ui.input}
+            value={form.timezone}
+            disabled={!canEdit}
+            onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+          >
+            {US_TIMEZONES.map((z) => (
+              <option key={z.value} value={z.value}>{z.label}</option>
+            ))}
+          </select>
+          <span className="text-sm font-normal text-ink-muted">
+            Every job time and working hour is on this clock, whatever zone your computer is in.
+          </span>
+        </label>
         <div className={ui.row}>
           {f('work_start', 'Working day starts', 'time')}
           {f('work_end', 'Working day ends', 'time')}

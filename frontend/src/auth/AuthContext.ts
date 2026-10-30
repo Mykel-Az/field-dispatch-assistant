@@ -12,6 +12,8 @@ export interface AuthState {
     password: string;
   }) => Promise<User>;
   signOut: () => Promise<void>;
+  /** Re-read the signed-in user (e.g. after the organization's time zone changed). */
+  refreshUser: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthState | null>(null);

@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 
 from api.models import CandidateSkillRule, Job, JobStatusHistory, Skill
 
-from .conftest import client_for, make_job, technician_of
+from .conftest import client_for, make_job, make_user, technician_of
 
 SLOT = {"slot_start": "2026-11-02T09:00:00Z", "slot_end": "2026-11-02T11:00:00Z"}
 
@@ -660,3 +660,100 @@ def test_detail_has_coordinates_but_the_list_does_not(dispatcher_a, org_a):
     assert (detail["lat"], detail["lng"]) == (30.1, -97.5)
     row = client.get("/api/jobs/").json()["results"][0]
     assert "lat" not in row and "lng" not in row
+
+
+# ---- map pins ---------------------------------------------------------------
+def test_map_returns_thin_pins_for_located_jobs_only(dispatcher_a, org_a):
+    located = make_job(org_a, lat=30.1, lng=-97.5)
+    make_job(org_a, geocode_status="failed", lat=None, lng=None)
+    data = client_for(dispatcher_a).get("/api/map/jobs/").json()
+    assert data["truncated"] is False
+    assert data["results"] == [
+        {
+            "id": located.pk,
+            "lat": 30.1,
+            "lng": -97.5,
+            "status": "unassigned",
+            "technician_id": None,
+            "is_urgent": False,
+        }
+    ]
+
+
+def test_map_filters_by_status_and_date(dispatcher_a, org_a):
+    make_job(org_a, lat=30.1, lng=-97.5)
+    done = make_job(org_a, status="completed", lat=30.2, lng=-97.6)
+    client = client_for(dispatcher_a)
+    ids = [
+        p["id"] for p in client.get("/api/map/jobs/?status=completed").json()["results"]
+    ]
+    assert ids == [done.pk]
+    assert (
+        client.get("/api/map/jobs/?scheduled_date=2030-01-01").json()["results"] == []
+    )
+    assert client.get("/api/map/jobs/?status=nope").status_code == 400
+
+
+def test_map_never_shows_another_organizations_jobs(dispatcher_a, org_b):
+    make_job(org_b, lat=30.1, lng=-97.5)
+    assert client_for(dispatcher_a).get("/api/map/jobs/").json()["results"] == []
+
+
+def test_map_is_for_dispatchers_only(technician_a):
+    assert client_for(technician_a).get("/api/map/jobs/").status_code == 403
+    assert APIClient().get("/api/map/jobs/").status_code == 401
+
+
+def test_map_caps_the_pin_count(dispatcher_a, org_a, monkeypatch):
+    monkeypatch.setattr("api.views.MAP_PIN_LIMIT", 2)
+    for _ in range(3):
+        make_job(org_a, lat=30.1, lng=-97.5)
+    data = client_for(dispatcher_a).get("/api/map/jobs/").json()
+    assert len(data["results"]) == 2 and data["truncated"] is True
+
+
+# ---- combined filters (jobs list and map) -----------------------------------
+def test_status_filter_takes_several_values_on_list_and_map(
+    dispatcher_a, org_a, technician_a
+):
+    tech = technician_of(technician_a)
+    a = make_job(org_a, lat=30.1, lng=-97.5)
+    b = make_job(org_a, status="assigned", technician=tech, lat=30.2, lng=-97.4)
+    c = make_job(org_a, status="completed", lat=30.3, lng=-97.3)
+    client = client_for(dispatcher_a)
+    query = "?status=unassigned&status=assigned"
+    listed = {r["id"] for r in client.get(f"/api/jobs/{query}").json()["results"]}
+    mapped = {r["id"] for r in client.get(f"/api/map/jobs/{query}").json()["results"]}
+    assert listed == mapped == {a.pk, b.pk} and c.pk not in listed
+
+
+def test_filters_combine_with_and(dispatcher_a, org_a, technician_a):
+    tech = technician_of(technician_a)
+    mine = make_job(org_a, status="assigned", technician=tech, lat=30.1, lng=-97.5)
+    make_job(org_a, lat=30.2, lng=-97.4)  # unassigned, nobody's
+    make_job(org_a, status="completed", technician=tech, lat=30.3, lng=-97.3)
+    client = client_for(dispatcher_a)
+    query = f"?technician={tech.pk}&status=assigned&status=ongoing"
+    for path in ("/api/jobs/", "/api/map/jobs/"):
+        ids = [r["id"] for r in client.get(path + query).json()["results"]]
+        assert ids == [mine.pk]
+
+
+def test_one_bad_status_among_good_ones_is_a_400(dispatcher_a):
+    response = client_for(dispatcher_a).get("/api/jobs/?status=assigned&status=nope")
+    assert response.status_code == 400
+
+
+def test_technician_filter_takes_several_values(dispatcher_a, org_a, technician_a):
+    one = technician_of(technician_a)
+    two = technician_of(make_user(org_a, "technician", "tech-two@example.com"))
+    three = technician_of(make_user(org_a, "technician", "tech-three@example.com"))
+    a = make_job(org_a, status="assigned", technician=one, lat=30.1, lng=-97.5)
+    b = make_job(org_a, status="assigned", technician=two, lat=30.2, lng=-97.4)
+    make_job(org_a, status="assigned", technician=three, lat=30.3, lng=-97.3)
+    client = client_for(dispatcher_a)
+    query = f"?technician={one.pk}&technician={two.pk}"
+    for path in ("/api/jobs/", "/api/map/jobs/"):
+        ids = {r["id"] for r in client.get(path + query).json()["results"]}
+        assert ids == {a.pk, b.pk}
+    assert client.get("/api/jobs/?technician=abc").status_code == 400

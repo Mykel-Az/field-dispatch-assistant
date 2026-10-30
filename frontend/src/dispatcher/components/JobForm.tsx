@@ -18,8 +18,11 @@ import {
   type JobCreateInput,
   type JobDetail,
 } from '../../shared/api/models';
-import { splitLocal, toIso } from '../../shared/jobTime';
+import { splitLocal, toIso, zoneAbbreviation } from '../../shared/jobTime';
+import { timezoneLabel } from '../../shared/api/models';
+import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import PinMap, { type LatLng } from '../../shared/map/PinMap';
+import { notifyJobsChanged } from '../../shared/usePolling';
 import { ui } from '../../shared/ui';
 
 const ZIP = /^\d{5}(-\d{4})?$/;
@@ -49,6 +52,7 @@ interface Props {
 
 export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   const editing = job !== undefined;
+  const zone = useOrgTimezone();
   // Once a job is planned, the address, time and skills are frozen (the API enforces it too).
   const locked = editing && job.status !== 'unassigned';
 
@@ -214,6 +218,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           }
         }
       }
+      notifyJobsChanged();
       onSaved(saved);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) setConflict(true);
@@ -436,8 +441,9 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
               </label>
             </div>
             <p className={ui.muted}>
-              When someone can be at the address. The system picks the exact
-              visit time inside this window.
+              When someone can be at the address, in {timezoneLabel(zone)} time (
+              {zoneAbbreviation(zone)}). The system picks the exact visit time
+              inside this window.
             </p>
           </>
         )}

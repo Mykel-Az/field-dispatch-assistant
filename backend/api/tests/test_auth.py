@@ -73,6 +73,7 @@ def test_login_returns_user_and_creates_a_session(head_a, csrf_client):
     assert response.json()["organization"] == {
         "id": head_a.organization_id,
         "name": "Org A",
+        "timezone": "America/Chicago",
     }
     assert csrf_client.get("/api/auth/me/").status_code == 200
 
@@ -129,7 +130,11 @@ def test_me_returns_the_user_with_organization(head_a):
         "full_name": "head-a",
         "role": "head_dispatcher",
         "is_active": True,
-        "organization": {"id": head_a.organization_id, "name": "Org A"},
+        "organization": {
+            "id": head_a.organization_id,
+            "name": "Org A",
+            "timezone": "America/Chicago",
+        },
     }
 
 

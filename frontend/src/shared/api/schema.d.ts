@@ -277,6 +277,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/map/jobs/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /map/jobs/: every located job of the organization as a thin pin.
+         *
+         *     Jobs without usable coordinates are left out (the list flags those). Capped
+         *     at MAP_PIN_LIMIT, newest plan first; `truncated` says when the cap bit.
+         */
+        get: operations["map_jobs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/organization/": {
         parameters: {
             query?: never;
@@ -486,7 +508,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"];
+            readonly technician: components["schemas"]["JobTechnician"] | null;
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -495,6 +517,11 @@ export interface components {
             readonly slot_end: string | null;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
+        };
+        /** @description Who made a change. A system action has no actor (changed_by is null). */
+        JobActor: {
+            readonly id: number;
+            readonly full_name: string;
         };
         JobAssign: {
             technician_id: number;
@@ -531,7 +558,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"];
+            readonly technician: components["schemas"]["JobTechnician"] | null;
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -558,9 +585,7 @@ export interface components {
             readonly from_status: string;
             readonly to_status: components["schemas"]["JobStatusEnum"];
             readonly reason: string;
-            readonly changed_by: {
-                [key: string]: unknown;
-            } | null;
+            readonly changed_by: components["schemas"]["JobActor"] | null;
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -594,6 +619,21 @@ export interface components {
             email: string;
             password: string;
         };
+        /** @description One pin. Deliberately thin: the map polls this, so no text, no history. */
+        MapJob: {
+            readonly id: number;
+            /** Format: double */
+            readonly lat: number | null;
+            /** Format: double */
+            readonly lng: number | null;
+            readonly status: components["schemas"]["JobStatusEnum"];
+            readonly technician_id: number | null;
+            readonly is_urgent: boolean;
+        };
+        MapJobs: {
+            results: components["schemas"]["MapJob"][];
+            truncated: boolean;
+        };
         Organization: {
             readonly id: number;
             name: string;
@@ -605,6 +645,7 @@ export interface components {
             /** Format: double */
             lng?: number | null;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
+            timezone?: components["schemas"]["TimezoneEnum"];
             /** Format: time */
             work_start?: string | null;
             /** Format: time */
@@ -616,6 +657,7 @@ export interface components {
         OrganizationSummary: {
             readonly id: number;
             name: string;
+            timezone?: components["schemas"]["TimezoneEnum"];
         };
         PaginatedJobList: {
             /** @example 123 */
@@ -676,6 +718,7 @@ export interface components {
             /** Format: double */
             lng?: number | null;
             readonly geocode_status?: components["schemas"]["GeocodeStatusEnum"];
+            timezone?: components["schemas"]["TimezoneEnum"];
             /** Format: time */
             work_start?: string | null;
             /** Format: time */
@@ -754,6 +797,17 @@ export interface components {
             /** Format: time */
             shift_end: string;
         };
+        /**
+         * @description * `America/New_York` - Eastern
+         *     * `America/Chicago` - Central
+         *     * `America/Denver` - Mountain
+         *     * `America/Phoenix` - Arizona (no daylight saving)
+         *     * `America/Los_Angeles` - Pacific
+         *     * `America/Anchorage` - Alaska
+         *     * `Pacific/Honolulu` - Hawaii
+         * @enum {string}
+         */
+        TimezoneEnum: "America/New_York" | "America/Chicago" | "America/Denver" | "America/Phoenix" | "America/Los_Angeles" | "America/Anchorage" | "Pacific/Honolulu";
         User: {
             readonly id: number;
             /**
@@ -958,17 +1012,8 @@ export interface operations {
                 /** @description A page number within the paginated result set. */
                 page?: number;
                 scheduled_date?: string;
-                /**
-                 * @description * `unassigned` - Unassigned
-                 *     * `assigned` - Assigned
-                 *     * `ongoing` - Ongoing
-                 *     * `completed` - Completed
-                 *     * `incomplete` - Incomplete
-                 *     * `failed` - Failed
-                 *     * `canceled` - Canceled
-                 */
-                status?: "unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled";
-                technician?: number;
+                status?: ("unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled")[];
+                technician?: number[];
             };
             header?: never;
             path?: never;
@@ -1197,6 +1242,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    map_jobs_retrieve: {
+        parameters: {
+            query?: {
+                scheduled_date?: string;
+                status?: ("unassigned" | "assigned" | "ongoing" | "completed" | "incomplete" | "failed" | "canceled")[];
+                technician?: number[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapJobs"];
                 };
             };
         };

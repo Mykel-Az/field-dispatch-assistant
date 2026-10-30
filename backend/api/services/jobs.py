@@ -1,5 +1,7 @@
 """All writes to jobs. Nothing else may write Job.status (ADR-008)."""
 
+from zoneinfo import ZoneInfo
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -64,6 +66,25 @@ def _record(job, *, from_status, actor, reason, technician_id):
         changed_by=actor,
         reason=reason,
     )
+
+
+def local_date(moment, tz_name):
+    """The calendar date of `moment` on the clock of `tz_name`.
+    `moment=None` (an urgent job) means today there."""
+    zone = ZoneInfo(tz_name)
+    return (moment or timezone.now()).astimezone(zone).date()
+
+
+def rederive_dates(organization):
+    """After the organization's time zone changes: move each job with a time
+    window to the day it falls on in the new zone. Urgent jobs keep their day."""
+    changed = 0
+    for job in Job.objects.filter(organization=organization, slot_start__isnull=False):
+        day = local_date(job.slot_start, organization.timezone)
+        if day != job.scheduled_date:
+            Job.objects.filter(pk=job.pk).update(scheduled_date=day)
+            changed += 1
+    return changed
 
 
 def _plan_field_lock(job, client_version):

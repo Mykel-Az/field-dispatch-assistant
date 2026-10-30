@@ -3,8 +3,8 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
-from drf_spectacular.utils import extend_schema
-from rest_framework import generics, mixins, status, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
@@ -39,6 +39,7 @@ from .serializers import (
     JobUnassignSerializer,
     JobUpdateSerializer,
     LoginSerializer,
+    MapJobSerializer,
     OrganizationSerializer,
     RegisterSerializer,
     SetPasswordSerializer,
@@ -266,9 +267,12 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             serializer.instance = org
             if data.get("lat") is not None and data.get("lng") is not None:
                 data["geocode_status"] = GeocodeStatus.MANUAL
+            zone_changed = "timezone" in data and data["timezone"] != org.timezone
             for field, value in data.items():
                 setattr(org, field, value)
             org.save()
+            if zone_changed:
+                job_service.rederive_dates(org)
 
 
 class TechnicianViewSet(
@@ -354,8 +358,7 @@ class JobViewSet(
         if self.action == "list":
             filters = JobFilterSerializer(data=self.request.query_params)
             filters.is_valid(raise_exception=True)
-            for name, value in filters.validated_data.items():
-                qs = qs.filter(**{name: value})
+            qs = filters.filter(qs)
         return qs
 
     def get_serializer_class(self):
@@ -529,3 +532,44 @@ class GeocodeLookupView(APIView):
         serializer = GeocodeLookupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(locations.lookup(**serializer.validated_data))
+
+
+MAP_PIN_LIMIT = 500
+
+
+class MapJobsView(APIView):
+    """GET /map/jobs/: every located job of the organization as a thin pin.
+
+    Jobs without usable coordinates are left out (the list flags those). Capped
+    at MAP_PIN_LIMIT, newest plan first; `truncated` says when the cap bit.
+    """
+
+    permission_classes = [IsDispatcher]
+
+    @extend_schema(
+        parameters=[JobFilterSerializer],
+        responses={
+            200: inline_serializer(
+                "MapJobs",
+                {
+                    "results": MapJobSerializer(many=True),
+                    "truncated": serializers.BooleanField(),
+                },
+            )
+        },
+    )
+    def get(self, request):
+        filters = JobFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        jobs = filters.filter(
+            Job.objects.for_organization(request.user.organization).filter(
+                lat__isnull=False, lng__isnull=False
+            )
+        ).order_by("-scheduled_date", "id")
+        rows = list(jobs[: MAP_PIN_LIMIT + 1])
+        return Response(
+            {
+                "results": MapJobSerializer(rows[:MAP_PIN_LIMIT], many=True).data,
+                "truncated": len(rows) > MAP_PIN_LIMIT,
+            }
+        )

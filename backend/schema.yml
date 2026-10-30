@@ -181,29 +181,32 @@ paths:
       - in: query
         name: status
         schema:
-          enum:
-          - unassigned
-          - assigned
-          - ongoing
-          - completed
-          - incomplete
-          - failed
-          - canceled
-          type: string
-          minLength: 1
-        description: |-
-          * `unassigned` - Unassigned
-          * `assigned` - Assigned
-          * `ongoing` - Ongoing
-          * `completed` - Completed
-          * `incomplete` - Incomplete
-          * `failed` - Failed
-          * `canceled` - Canceled
+          type: array
+          items:
+            enum:
+            - unassigned
+            - assigned
+            - ongoing
+            - completed
+            - incomplete
+            - failed
+            - canceled
+            type: string
+            description: |-
+              * `unassigned` - Unassigned
+              * `assigned` - Assigned
+              * `ongoing` - Ongoing
+              * `completed` - Completed
+              * `incomplete` - Incomplete
+              * `failed` - Failed
+              * `canceled` - Canceled
       - in: query
         name: technician
         schema:
-          type: integer
-          minimum: 1
+          type: array
+          items:
+            type: integer
+            minimum: 1
       tags:
       - jobs
       security:
@@ -475,6 +478,60 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobDetail'
+          description: ''
+  /api/map/jobs/:
+    get:
+      operationId: map_jobs_retrieve
+      description: |-
+        GET /map/jobs/: every located job of the organization as a thin pin.
+
+        Jobs without usable coordinates are left out (the list flags those). Capped
+        at MAP_PIN_LIMIT, newest plan first; `truncated` says when the cap bit.
+      parameters:
+      - in: query
+        name: scheduled_date
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: status
+        schema:
+          type: array
+          items:
+            enum:
+            - unassigned
+            - assigned
+            - ongoing
+            - completed
+            - incomplete
+            - failed
+            - canceled
+            type: string
+            description: |-
+              * `unassigned` - Unassigned
+              * `assigned` - Assigned
+              * `ongoing` - Ongoing
+              * `completed` - Completed
+              * `incomplete` - Incomplete
+              * `failed` - Failed
+              * `canceled` - Canceled
+      - in: query
+        name: technician
+        schema:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+      tags:
+      - map
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MapJobs'
           description: ''
   /api/organization/:
     get:
@@ -893,6 +950,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/JobTechnician'
           readOnly: true
+          nullable: true
         scheduled_date:
           type: string
           format: date
@@ -930,6 +988,20 @@ components:
       - status
       - technician
       - title
+    JobActor:
+      type: object
+      description: Who made a change. A system action has no actor (changed_by is
+        null).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - full_name
+      - id
     JobAssign:
       type: object
       properties:
@@ -1037,6 +1109,7 @@ components:
           allOf:
           - $ref: '#/components/schemas/JobTechnician'
           readOnly: true
+          nullable: true
         scheduled_date:
           type: string
           format: date
@@ -1137,10 +1210,10 @@ components:
           type: string
           readOnly: true
         changed_by:
-          type: object
-          additionalProperties: {}
-          nullable: true
+          allOf:
+          - $ref: '#/components/schemas/JobActor'
           readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -1222,6 +1295,54 @@ components:
       required:
       - email
       - password
+    MapJob:
+      type: object
+      description: 'One pin. Deliberately thin: the map polls this, so no text, no
+        history.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        lat:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        lng:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/JobStatusEnum'
+          readOnly: true
+        technician_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        is_urgent:
+          type: boolean
+          readOnly: true
+      required:
+      - id
+      - is_urgent
+      - lat
+      - lng
+      - status
+      - technician_id
+    MapJobs:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MapJob'
+        truncated:
+          type: boolean
+      required:
+      - results
+      - truncated
     Organization:
       type: object
       properties:
@@ -1264,6 +1385,8 @@ components:
           allOf:
           - $ref: '#/components/schemas/GeocodeStatusEnum'
           readOnly: true
+        timezone:
+          $ref: '#/components/schemas/TimezoneEnum'
         work_start:
           type: string
           format: time
@@ -1295,6 +1418,8 @@ components:
         name:
           type: string
           maxLength: 255
+        timezone:
+          $ref: '#/components/schemas/TimezoneEnum'
       required:
       - id
       - name
@@ -1436,6 +1561,8 @@ components:
           allOf:
           - $ref: '#/components/schemas/GeocodeStatusEnum'
           readOnly: true
+        timezone:
+          $ref: '#/components/schemas/TimezoneEnum'
         work_start:
           type: string
           format: time
@@ -1626,6 +1753,24 @@ components:
       - shift_end
       - shift_start
       - skill_ids
+    TimezoneEnum:
+      enum:
+      - America/New_York
+      - America/Chicago
+      - America/Denver
+      - America/Phoenix
+      - America/Los_Angeles
+      - America/Anchorage
+      - Pacific/Honolulu
+      type: string
+      description: |-
+        * `America/New_York` - Eastern
+        * `America/Chicago` - Central
+        * `America/Denver` - Mountain
+        * `America/Phoenix` - Arizona (no daylight saving)
+        * `America/Los_Angeles` - Pacific
+        * `America/Anchorage` - Alaska
+        * `Pacific/Honolulu` - Hawaii
     User:
       type: object
       properties:

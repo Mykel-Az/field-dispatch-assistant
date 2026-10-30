@@ -6,7 +6,7 @@
 
 Everything goes through the real services (create_job, transition), so every job has a
 genuine status history. Dates are relative to today, so the date filter always has data.
-Slot times are stored in UTC and shown in your browser's timezone.
+Hours are the organization's local clock (Central), the same clock the app shows.
 
 Refuses to run unless DEBUG is on (so it can never fill production), unless --force.
 Geocoding always uses the fake geocoder: no network, and two addresses are rigged to fail
@@ -14,6 +14,7 @@ so the "location needs attention" flag has something to show.
 """
 
 import datetime
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -31,6 +32,7 @@ from api.models import (
 from api.services import jobs as svc
 
 PASSWORD = "Demo-Passw0rd!"
+CENTRAL = ZoneInfo("America/Chicago")
 ORG_NAME = "Brightline Service Co."
 OTHER_ORG_NAME = "Northwind Repairs (other organization)"
 
@@ -526,6 +528,7 @@ class Command(BaseCommand):
             address="100 Congress Ave", postal_code="78701", lat=30.2655, lng=-97.7431,
             geocode_status="ok", location_label="100 Congress Ave, Austin, TX 78701",
             work_start=datetime.time(7), work_end=datetime.time(18),
+            timezone="America/Chicago",
         )  # fmt: skip
         users = {}
         for email, name, role, skill_names in STAFF:
@@ -546,7 +549,7 @@ class Command(BaseCommand):
         return org, users
 
     def _create_jobs(self, org, users):
-        today = timezone.now().date()
+        today = timezone.now().astimezone(CENTRAL).date()
         actor = users["dispatcher"]
         for (
             offset,
@@ -572,7 +575,7 @@ class Command(BaseCommand):
             }  # fmt: skip
             if not urgent:
                 start = datetime.datetime.combine(
-                    day, datetime.time(hour), tzinfo=datetime.UTC
+                    day, datetime.time(hour), tzinfo=CENTRAL
                 )
                 fields.update(
                     slot_start=start, slot_end=start + datetime.timedelta(hours=hours)
@@ -599,12 +602,12 @@ class Command(BaseCommand):
                 job = svc.transition(job, to, users["dispatcher"], reason)
 
     def _create_bulk(self, org, users, count):
-        today = timezone.now().date()
+        today = timezone.now().astimezone(CENTRAL).date()
         for i in range(count):
             title, category = BULK_TITLES[i % len(BULK_TITLES)]
             day = today + datetime.timedelta(days=i % 5)
             start = datetime.datetime.combine(
-                day, datetime.time(8 + i % 8), tzinfo=datetime.UTC
+                day, datetime.time(8 + i % 8), tzinfo=CENTRAL
             )
             svc.create_job(
                 organization=org, actor=users["dispatcher"], skills=svc.default_skills_for(category),
@@ -621,7 +624,7 @@ class Command(BaseCommand):
             role="head_dispatcher", organization=org,
         )  # fmt: skip
         start = datetime.datetime.combine(
-            timezone.now().date(), datetime.time(10), tzinfo=datetime.UTC
+            timezone.now().astimezone(CENTRAL).date(), datetime.time(10), tzinfo=CENTRAL
         )
         svc.create_job(
             organization=org, actor=head, skills=svc.default_skills_for("hvac"),

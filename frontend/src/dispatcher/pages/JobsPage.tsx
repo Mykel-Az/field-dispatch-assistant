@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { fetchJobs, fetchTechnicians } from '../../shared/api/client';
+import { fetchJobs } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
-import { CATEGORY_LABEL, type JobRow, type Page, type Technician } from '../../shared/api/models';
+import { CATEGORY_LABEL, type JobRow, type Page } from '../../shared/api/models';
+import JobFilterBar from '../../shared/components/JobFilterBar';
 import StatusBadge from '../../shared/components/StatusBadge';
 import StatusPin from '../../shared/components/StatusPin';
+import { hasFilters, NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
 import { formatSlot, placeLine } from '../../shared/jobTime';
+import { useOrgTimezone } from '../../shared/useOrgTimezone';
+import { usePolling } from '../../shared/usePolling';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
 import { ui } from '../../shared/ui';
 
@@ -24,6 +28,7 @@ function LocationFlag() {
 }
 
 function JobCard({ job }: { job: JobRow }) {
+  useOrgTimezone(); // redraw the times if the organization's zone changes
   const meta = isJobStatus(job.status) ? STATUS_META[job.status] : null;
   const needsLocation = job.geocode_status === 'failed' || job.geocode_status === 'pending';
   return (
@@ -64,39 +69,32 @@ function JobCard({ job }: { job: JobRow }) {
 
 export default function JobsPage() {
   const [params, setParams] = useSearchParams();
-  const status = params.get('status') ?? '';
-  const scheduledDate = params.get('scheduled_date') ?? '';
-  const technician = params.get('technician') ?? '';
+  const filters = useMemo(() => readFilters(params), [params]);
   const page = Math.max(1, Number(params.get('page')) || 1);
 
   const [data, setData] = useState<Page<JobRow> | null>(null);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     try {
-      setData(await fetchJobs({ status, scheduled_date: scheduledDate, technician, page }));
+      setData(await fetchJobs(filters, page));
       setError('');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load jobs.');
     }
-  }, [status, scheduledDate, technician, page]);
+  }, [filters, page]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- data fetch when filters change
     void load();
   }, [load]);
 
-  useEffect(() => {
-    fetchTechnicians().then(setTechnicians).catch(() => setTechnicians([]));
-  }, []);
+  usePolling(() => void load());
 
-  function setFilter(name: string, value: string) {
-    const next = new URLSearchParams(params);
-    if (value) next.set(name, value);
-    else next.delete(name);
-    next.delete('page'); // a new filter starts at page 1
-    setParams(next, { replace: true });
+  function changeFilters(next: typeof filters) {
+    const written = writeFilters(params, next);
+    written.delete('page'); // a new filter starts at page 1
+    setParams(written, { replace: true });
   }
 
   function goToPage(n: number) {
@@ -106,7 +104,7 @@ export default function JobsPage() {
     setParams(next);
   }
 
-  const filtered = Boolean(status || scheduledDate || technician);
+  const filtered = hasFilters(filters);
   const lastPage = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
 
   return (
@@ -121,35 +119,7 @@ export default function JobsPage() {
         <Link to="/jobs/new" className={`${ui.btn} inline-flex items-center`}>+ New job</Link>
       </div>
 
-      <div className="my-5 flex flex-wrap gap-3">
-        <label className={ui.label}>
-          Status
-          <select className={`${ui.input} min-w-40`} value={status} onChange={(e) => setFilter('status', e.target.value)}>
-            <option value="">All statuses</option>
-            {JOB_STATUSES.map((s) => (
-              <option key={s} value={s}>{STATUS_META[s].label}</option>
-            ))}
-          </select>
-        </label>
-        <label className={ui.label}>
-          Date
-          <input className={ui.input} type="date" value={scheduledDate} onChange={(e) => setFilter('scheduled_date', e.target.value)} />
-        </label>
-        <label className={ui.label}>
-          Technician
-          <select className={`${ui.input} min-w-44`} value={technician} onChange={(e) => setFilter('technician', e.target.value)}>
-            <option value="">Everyone</option>
-            {technicians.map((t) => (
-              <option key={t.id} value={t.id}>{t.user.full_name}</option>
-            ))}
-          </select>
-        </label>
-        {filtered && (
-          <button className={`${ui.btnSmall} self-end`} onClick={() => setParams({}, { replace: true })}>
-            Clear filters
-          </button>
-        )}
-      </div>
+      <JobFilterBar value={filters} onChange={changeFilters} onClear={() => changeFilters(NO_FILTERS)} />
 
       {error && <p role="alert" className={ui.error}>{error}</p>}
       {data === null && !error && <p className={ui.muted}>Loading…</p>}

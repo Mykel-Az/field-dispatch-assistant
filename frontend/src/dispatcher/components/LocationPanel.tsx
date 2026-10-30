@@ -3,6 +3,7 @@ import { pinJob, retryGeocode } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import type { JobDetail } from '../../shared/api/models';
 import PinMap, { type LatLng } from '../../shared/map/PinMap';
+import { notifyJobsChanged } from '../../shared/usePolling';
 import { ui } from '../../shared/ui';
 
 const SAYS: Record<string, string> = {
@@ -34,7 +35,9 @@ export default function LocationPanel({ job, onChanged }: Props) {
     setBusy(true);
     setError('');
     try {
-      onChanged(await action());
+      const next = await action();
+      notifyJobsChanged();
+      onChanged(next);
       setDraft(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not reach the server.');

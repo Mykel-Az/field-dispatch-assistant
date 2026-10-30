@@ -6,6 +6,8 @@ import { CATEGORY_LABEL, type JobDetail } from '../../shared/api/models';
 import StatusBadge from '../../shared/components/StatusBadge';
 import { formatSlot, formatStamp, placeLine } from '../../shared/jobTime';
 import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
+import { useOrgTimezone } from '../../shared/useOrgTimezone';
+import { notifyJobsChanged } from '../../shared/usePolling';
 import { ui } from '../../shared/ui';
 import AssignPanel from '../components/AssignPanel';
 import JobForm from '../components/JobForm';
@@ -23,6 +25,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 function History({ job }: { job: JobDetail }) {
+  useOrgTimezone();
   return (
     <section className={ui.card} aria-labelledby="history-heading">
       <h2 id="history-heading" className="mb-3 text-lg font-bold">History</h2>
@@ -60,7 +63,9 @@ function CancelPanel({ job, onCanceled }: { job: JobDetail; onCanceled: (j: JobD
     setBusy(true);
     setError('');
     try {
-      onCanceled(await cancelJob(job.id, reason.trim()));
+      const canceled = await cancelJob(job.id, reason.trim());
+      notifyJobsChanged();
+      onCanceled(canceled);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not cancel the job.');
     } finally {
@@ -94,6 +99,7 @@ function CancelPanel({ job, onCanceled }: { job: JobDetail; onCanceled: (j: JobD
 }
 
 export default function JobPage() {
+  useOrgTimezone();
   const { id } = useParams();
   const jobId = Number(id);
   const [job, setJob] = useState<JobDetail | null>(null);

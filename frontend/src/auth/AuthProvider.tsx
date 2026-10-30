@@ -39,9 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    setUser(await fetchMe());
+  }, []);
+
   const value = useMemo(
-    () => ({ user, signIn, signUp, signOut }),
-    [user, signIn, signUp, signOut],
+    () => ({ user, signIn, signUp, signOut, refreshUser }),
+    [user, signIn, signUp, signOut, refreshUser],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
