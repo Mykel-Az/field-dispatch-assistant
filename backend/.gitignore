@@ -184,3 +184,7 @@ cython_debug/
 # Folders
 
 /staticfiles/
+
+# collectstatic output (built on deploy)
+/config/staticfiles/
+/staticfiles/
