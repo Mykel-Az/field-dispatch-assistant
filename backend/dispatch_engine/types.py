@@ -4,6 +4,12 @@ from datetime import datetime
 from enum import StrEnum
 
 
+def _require_aware(name: str, value: datetime) -> None:
+    """Engine times are absolute. A naive datetime would silently mean 'some local clock'."""
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+
+
 @dataclass(frozen=True, slots=True)
 class Location:
     lat: float
@@ -18,7 +24,7 @@ class Location:
 
 @dataclass(frozen=True, slots=True)
 class JobView:
-    id: str
+    id: int
     label: str
     location: Location
     is_urgent: bool
@@ -29,29 +35,45 @@ class JobView:
     acceptable_skill_ids: frozenset[int]
 
     def __post_init__(self):
-        if self.slot_start and self.slot_end and self.slot_start > self.slot_end:
-            raise ValueError(
-                f"Slot start time {self.slot_start} cannot be after slot end time {self.slot_end}"
-            )
+        _require_aware("created_at", self.created_at)
+        if (self.slot_start is None) != (self.slot_end is None):
+            raise ValueError("slot_start and slot_end must be set together")
+        if self.slot_start is None:
+            if not self.is_urgent:  # invariant 7
+                raise ValueError("a non-urgent job needs a slot")
+        else:
+            assert self.slot_end is not None
+            _require_aware("slot_start", self.slot_start)
+            _require_aware("slot_end", self.slot_end)
+            if self.slot_start >= self.slot_end:
+                raise ValueError(
+                    f"Slot start time {self.slot_start} must be before slot end time {self.slot_end}"
+                )
+        if self.duration_minutes < 1:
+            raise ValueError("duration_minutes must be at least 1")
 
 
 @dataclass(frozen=True, slots=True)
 class TechView:
-    id: str
+    id: int
     label: str
     skill_ids: frozenset[int]
-    shift_start: datetime | None
-    shift_end: datetime | None
+    shift_start: datetime
+    shift_end: datetime
     is_available: bool
     free_at: datetime
     position: Location
     assigned_count: int
 
     def __post_init__(self):
-        if self.shift_start and self.shift_end and self.shift_start > self.shift_end:
+        for name in ("shift_start", "shift_end", "free_at"):
+            _require_aware(name, getattr(self, name))
+        if self.shift_start >= self.shift_end:
             raise ValueError(
-                f"Shift start time {self.shift_start} cannot be after shift end time {self.shift_end}"
+                f"Shift start time {self.shift_start} must be before shift end time {self.shift_end}"
             )
+        if self.assigned_count < 0:
+            raise ValueError("assigned_count cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,9 +81,17 @@ class OrgConfig:
     workstation: Location
     scoring_strategy: str
     speed_mph: float
-    urgent_buffer_mintes: float
+    urgent_buffer_minutes: float
     at_risk_minutes: float
     max_jobs_per_tech_per_day: int
+
+    def __post_init__(self):
+        if self.speed_mph <= 0:  # distance divides by this
+            raise ValueError("speed_mph must be positive")
+        if self.urgent_buffer_minutes < 0 or self.at_risk_minutes < 0:
+            raise ValueError("buffer and threshold minutes cannot be negative")
+        if self.max_jobs_per_tech_per_day < 1:
+            raise ValueError("max_jobs_per_tech_per_day must be at least 1")
 
 
 class ReasonCode(StrEnum):
@@ -89,22 +119,27 @@ class SlaLabel(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Assignment:
-    job_id: str
-    technician_id: str
+    job_id: int
+    technician_id: int
     estimated_arrival: datetime
     slack_minutes: float
     sla_label: SlaLabel
     risk: float
     explanation: Explanation
 
+    def __post_init__(self):
+        _require_aware("estimated_arrival", self.estimated_arrival)
+        if not 0.0 <= self.risk <= 1.0:  # internal ranking value, never shown
+            raise ValueError("risk must be between 0 and 1")
+
 
 @dataclass(frozen=True, slots=True)
-class unassigned:
-    job_id: str
+class Unassigned:
+    job_id: int
     explanation: Explanation
 
 
 @dataclass(frozen=True, slots=True)
 class Plan:
     assignments: tuple[Assignment, ...]
-    unassigned: tuple[unassigned, ...]
+    unassigned: tuple[Unassigned, ...]
