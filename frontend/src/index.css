@@ -103,3 +103,19 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
 }
+
+/* The splash logo: a slow breathe, not a spinner (WakeGate). */
+@theme {
+  --animate-logo-pulse: logo-pulse 1.8s ease-in-out infinite;
+  @keyframes logo-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.88);
+      opacity: 0.55;
+    }
+  }
+}

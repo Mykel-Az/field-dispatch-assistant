@@ -22,3 +22,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [015](015-session-cookie-auth.md) | Session-cookie authentication |
 | [016](016-multi-tenancy-explicit-scoping.md) | Multi-tenancy with explicit scoping |
 | [017](017-roles-immutability-global-email.md) | Roles, immutability, global email |
+| [018](018-splash-instead-of-keep-alive.md) | Cold-start splash instead of a keep-alive job |

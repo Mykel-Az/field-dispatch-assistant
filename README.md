@@ -78,6 +78,13 @@ npm run dev                     # http://localhost:5173
 
 The frontend reads `VITE_API_BASE_URL` (default `http://localhost:8000/api`).
 
+### Cold start
+
+The backend is on a free Render service that sleeps when idle. On load the app
+checks `/api/health/` and shows a "Waking up the server" screen (with a retry
+after 90 s) instead of a blank page (ADR-018). If the first visit looks slow,
+that is why; wait for the screen to clear.
+
 ### Environment variables (backend, production)
 
 | Variable | Purpose |

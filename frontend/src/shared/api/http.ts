@@ -59,6 +59,24 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
 
+/**
+ * Is the backend awake? One cheap GET /health/ with no session, no CSRF and no
+ * 401 handling. Any network failure or non-200 (a sleeping Render service
+ * answers 502/503 through the rewrite) counts as "not yet", never as an error.
+ */
+export async function probeHealth(signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch(`${BASE_URL}/health/`, {
+      signal,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 function readCookie(name: string): string | null {
   const match = document.cookie
     .split('; ')
