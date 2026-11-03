@@ -1,6 +1,8 @@
-"""
-The engine must never read the system time itself. Invariant 14 says the same input and config give the same output. so we use dependency injection.
-i.e: object from external source instead of internal
+"""Time for the dispatch engine.
+
+The engine never reads the system time itself: "now" is an input, so the same
+input and config always give the same plan (invariant 14). The clock is injected
+instead. `SystemClock` is for the app, `FixedClock` is for tests.
 """
 
 from datetime import datetime, timezone
@@ -8,7 +10,7 @@ from typing import Protocol
 
 
 class Clock(Protocol):
-    """returns consistent, timezone-aware source of time to the engine"""
+    """A source of timezone-aware times for the engine."""
 
     def now(self) -> datetime: ...
 
@@ -21,7 +23,7 @@ class SystemClock:
 
 
 class FixedClock:
-    """returns a fixed time, useful for predictabe execution and testing"""
+    """Always returns the same instant, for predictable tests."""
 
     def __init__(self, instant: datetime) -> None:
         if instant.tzinfo is None or instant.utcoffset() is None:

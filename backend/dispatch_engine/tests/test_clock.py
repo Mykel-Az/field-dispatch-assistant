@@ -9,7 +9,7 @@ FIXED_INSTANT = datetime(2026, 11, 3, 9, 0, tzinfo=timezone.utc)
 
 
 class TestFixedClock:
-    def test_now_returns_the_suppled_instant(self):
+    def test_now_returns_the_supplied_instant(self):
         clock = FixedClock(FIXED_INSTANT)
 
         assert clock.now() == FIXED_INSTANT
