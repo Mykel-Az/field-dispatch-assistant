@@ -22,3 +22,15 @@ re-estimate or replan only when it pushes later jobs on the same day.
 - Technicians may occasionally work past closing. Accepted and visible in the
   plan. Invariant #5 (never start a new job after shift_end) is testable as a
   property.
+
+
+## Amendment (Nov 4): inputs to the gate
+
+The gate compares absolute times: the adapter converts each technician's shift
+(stored as times in the organization's zone) to timezone-aware datetimes for
+the planned day, so daylight saving never reaches the engine.
+
+Speed, urgent buffer, at-risk threshold and the daily job target are defaults
+in code, not columns on `Organization`. **TIME:** this avoids a migration in
+Sprint 2. The full-fidelity path is per-organization columns, with the defaults
+as their initial values.

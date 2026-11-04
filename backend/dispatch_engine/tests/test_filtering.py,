@@ -1,0 +1,236 @@
+"""FILTER: who can take a job, and why the others cannot."""
+
+import random
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+
+from dispatch_engine.filtering import filter_technicians
+from dispatch_engine.types import JobView, Location, ReasonCode, TechView
+
+NOW = datetime(2026, 11, 3, 9, 0, tzinfo=timezone.utc)
+HERE = Location(30.2672, -97.7431)
+
+
+class StubDistance:
+    """A fixed travel time, so tests can hit the closing-time boundary exactly."""
+
+    def __init__(self, minutes: float = 0.0):
+        self.minutes = minutes
+
+    def miles(self, a, b) -> float:
+        return 0.0
+
+    def travel_minutes(self, a, b) -> float:
+        return self.minutes
+
+
+def make_job(**overrides) -> JobView:
+    fields = {
+        "id": 100,
+        "label": "AC not cooling",
+        "location": HERE,
+        "is_urgent": False,
+        "created_at": NOW,
+        "slot_start": NOW + timedelta(hours=1),
+        "slot_end": NOW + timedelta(hours=3),
+        "duration_minutes": 60,
+        "acceptable_skill_ids": frozenset({1, 2}),
+    }
+    return JobView(**{**fields, **overrides})
+
+
+def make_tech(**overrides) -> TechView:
+    fields = {
+        "id": 1,
+        "label": "Sam",
+        "skill_ids": frozenset({1}),
+        "shift_start": NOW,
+        "shift_end": NOW + timedelta(hours=8),
+        "is_available": True,
+        "free_at": NOW,
+        "position": HERE,
+        "assigned_count": 0,
+    }
+    return TechView(**{**fields, **overrides})
+
+
+def run(job, techs, travel=0.0, now=NOW):
+    return filter_technicians(job, techs, StubDistance(travel), now)
+
+
+# ---- the three rules --------------------------------------------------------
+def test_everyone_who_fits_is_feasible():
+    result = run(
+        make_job(), [make_tech(id=1), make_tech(id=2, skill_ids=frozenset({2}))]
+    )
+    assert [c.technician_id for c in result.feasible] == [1, 2]
+    assert result.rejected == ()
+
+
+def test_a_technician_without_a_matching_skill_is_rejected():
+    result = run(make_job(), [make_tech(skill_ids=frozenset({9}))])
+    assert result.feasible == ()
+    (rejection,) = result.rejected
+    assert rejection.reason.code == ReasonCode.SKILL_MISMATCH
+    assert rejection.reason.facts == {"technician_id": 1, "job_id": 100}
+
+
+def test_one_shared_skill_is_enough():  # any-of, not all-of
+    job = make_job(acceptable_skill_ids=frozenset({1, 2, 3}))
+    result = run(job, [make_tech(skill_ids=frozenset({3, 9}))])
+    assert len(result.feasible) == 1
+
+
+def test_an_unavailable_technician_is_rejected():
+    result = run(make_job(), [make_tech(is_available=False)])
+    (rejection,) = result.rejected
+    assert rejection.reason.code == ReasonCode.UNAVAILABLE
+
+
+def test_arriving_after_closing_is_rejected_with_the_minutes_late():
+    tech = make_tech(shift_end=NOW + timedelta(hours=1))
+    result = run(make_job(), [tech], travel=90)
+    (rejection,) = result.rejected
+    assert rejection.reason.code == ReasonCode.AFTER_CLOSING
+    assert rejection.reason.facts["minutes_after_closing"] == 30.0
+
+
+def test_arriving_exactly_at_closing_is_feasible_and_one_minute_later_is_not():
+    tech = make_tech(shift_end=NOW + timedelta(minutes=45))
+    job = make_job(slot_start=None, slot_end=None, is_urgent=True)
+    assert len(run(job, [tech], travel=45).feasible) == 1
+    assert len(run(job, [tech], travel=46).rejected) == 1
+
+
+# ---- which reason is given when several apply -------------------------------
+def test_unavailable_wins_over_the_other_reasons():
+    tech = make_tech(
+        is_available=False,
+        skill_ids=frozenset({9}),
+        shift_end=NOW + timedelta(minutes=1),
+    )
+    (rejection,) = run(make_job(), [tech], travel=60).rejected
+    assert rejection.reason.code == ReasonCode.UNAVAILABLE
+
+
+def test_a_skill_mismatch_wins_over_closing_time():
+    tech = make_tech(skill_ids=frozenset({9}), shift_end=NOW + timedelta(minutes=1))
+    (rejection,) = run(make_job(), [tech], travel=60).rejected
+    assert rejection.reason.code == ReasonCode.SKILL_MISMATCH
+
+
+# ---- arrival time -----------------------------------------------------------
+@pytest.mark.parametrize(
+    "now_offset, free_offset, shift_offset, expected_start",
+    [
+        (30, 0, 0, 30),  # it is already later than everything else
+        (0, 45, 0, 45),  # still busy with a job
+        (0, 0, 60, 60),  # the shift has not started
+    ],
+)
+def test_arrival_is_the_latest_start_plus_travel(
+    now_offset, free_offset, shift_offset, expected_start
+):
+    tech = make_tech(
+        free_at=NOW + timedelta(minutes=free_offset),
+        shift_start=NOW + timedelta(minutes=shift_offset),
+    )
+    job = make_job(slot_start=None, slot_end=None, is_urgent=True)
+    result = run(job, [tech], travel=10, now=NOW + timedelta(minutes=now_offset))
+    assert result.feasible[0].estimated_arrival == NOW + timedelta(
+        minutes=expected_start + 10
+    )
+    assert result.feasible[0].travel_minutes == 10
+
+
+def test_a_job_with_a_slot_cannot_be_reached_before_the_slot_opens():
+    job = make_job(
+        slot_start=NOW + timedelta(hours=3), slot_end=NOW + timedelta(hours=4)
+    )
+    result = run(job, [make_tech()], travel=10)
+    assert result.feasible[0].estimated_arrival == NOW + timedelta(hours=3)
+
+
+# ---- edges and ordering -----------------------------------------------------
+def test_no_technicians_means_nothing_feasible_and_nothing_rejected():
+    result = run(make_job(), [])
+    assert result.feasible == () and result.rejected == ()
+
+
+def test_a_job_that_accepts_no_skill_rejects_everyone():
+    result = run(
+        make_job(acceptable_skill_ids=frozenset()), [make_tech(id=1), make_tech(id=2)]
+    )
+    assert [r.reason.code for r in result.rejected] == [ReasonCode.SKILL_MISMATCH] * 2
+
+
+def test_results_are_in_id_order_whatever_the_input_order():
+    techs = [make_tech(id=3), make_tech(id=1), make_tech(id=2, is_available=False)]
+    result = run(make_job(), techs)
+    assert [c.technician_id for c in result.feasible] == [1, 3]
+    assert [r.technician_id for r in result.rejected] == [2]
+
+
+# ---- properties (Hypothesis) ------------------------------------------------
+@st.composite
+def technicians(draw):
+    rows = draw(
+        st.lists(
+            st.tuples(
+                st.frozensets(st.integers(1, 4)),  # skills
+                st.booleans(),  # available
+                st.integers(0, 600),  # minutes until free
+                st.integers(1, 720),  # shift length in minutes
+            ),
+            max_size=8,
+        )
+    )
+    return [
+        make_tech(
+            id=i,
+            skill_ids=skills,
+            is_available=available,
+            free_at=NOW + timedelta(minutes=free),
+            shift_end=NOW + timedelta(minutes=length),
+        )
+        for i, (skills, available, free, length) in enumerate(rows, start=1)
+    ]
+
+
+jobs = st.frozensets(st.integers(1, 4)).map(lambda s: make_job(acceptable_skill_ids=s))
+travel_times = st.integers(0, 600)
+
+
+@given(jobs, technicians(), travel_times)
+def test_every_feasible_technician_has_a_matching_skill(
+    job, techs, travel
+):  # invariant 2
+    by_id = {t.id: t for t in techs}
+    for candidate in run(job, techs, travel).feasible:
+        tech = by_id[candidate.technician_id]
+        assert tech.skill_ids & job.acceptable_skill_ids
+        assert tech.is_available
+        assert candidate.estimated_arrival <= tech.shift_end
+
+
+@given(jobs, technicians(), travel_times)
+def test_every_technician_is_either_feasible_or_rejected_exactly_once(
+    job, techs, travel
+):
+    result = run(job, techs, travel)
+    ids = [c.technician_id for c in result.feasible] + [
+        r.technician_id for r in result.rejected
+    ]
+    assert sorted(ids) == sorted(t.id for t in techs)
+
+
+@given(jobs, technicians(), travel_times, st.randoms())
+def test_the_result_does_not_depend_on_input_order(
+    job, techs, travel, rnd: random.Random
+):
+    shuffled = list(techs)
+    rnd.shuffle(shuffled)
+    assert run(job, shuffled, travel) == run(job, techs, travel)

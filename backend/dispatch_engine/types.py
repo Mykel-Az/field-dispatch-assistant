@@ -143,3 +143,29 @@ class Unassigned:
 class Plan:
     assignments: tuple[Assignment, ...]
     unassigned: tuple[Unassigned, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    """A technician who can take the job, with the arrival time SCORE needs."""
+
+    technician_id: int
+    estimated_arrival: datetime
+    travel_minutes: float
+
+    def __post_init__(self):
+        _require_aware("estimated_arrival", self.estimated_arrival)
+
+
+@dataclass(frozen=True, slots=True)
+class Rejection:
+    """A technician who cannot take the job, and the one reason why."""
+
+    technician_id: int
+    reason: Reason
+
+
+@dataclass(frozen=True, slots=True)
+class FilterResult:
+    feasible: tuple[Candidate, ...]
+    rejected: tuple[Rejection, ...]

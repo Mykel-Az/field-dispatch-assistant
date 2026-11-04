@@ -20,3 +20,14 @@ is computed. Distances are computed live and never cached as a matrix.
 - Straight-line distance underestimates real travel. Mitigation: assumed-speed
   config and a stated limitation in the design document.
 - Swapping in a road-distance provider later touches one class.
+
+## Amendment (Nov 4): units, default speed and road factor
+
+Distances are in miles and speed in mph (US only). When the organization sets
+no speed, 30 mph is assumed. Travel time is straight-line miles times a road
+factor of 1.3, divided by speed, because roads are longer than straight lines
+and an unadjusted estimate makes every job look on time.
+
+**TIME:** 30 mph and 1.3 are estimates, not measured values. The full-fidelity
+path is a road-distance provider behind the same interface; nothing else
+changes. Until then the design document states the limitation.
