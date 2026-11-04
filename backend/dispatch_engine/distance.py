@@ -33,13 +33,13 @@ class HaversineProvider:
     """Straight-line (great-circle) distance, with travel time from an assumed speed."""
 
     def __init__(self, speed_mph: float = DEFAULT_SPEED_MPH) -> None:
-        if speed_mph <= 0:  # travel_minutes divides by it
+        if speed_mph <= 0:
             raise ValueError("speed_mph must be positive")
         self.speed_mph = speed_mph
 
     def miles(self, a: Location, b: Location) -> float:
         if a == b:
-            return 0.0  # exact zero, not floating-point noise
+            return 0.0
         lat1, lat2 = math.radians(a.lat), math.radians(b.lat)
         d_lat = lat2 - lat1
         d_lng = math.radians(b.lng - a.lng)
@@ -47,7 +47,6 @@ class HaversineProvider:
             math.sin(d_lat / 2) ** 2
             + math.cos(lat1) * math.cos(lat2) * math.sin(d_lng / 2) ** 2
         )
-        # Rounding can push h a hair above 1 for opposite points; asin would then fail.
         return 2 * EARTH_RADIUS_MILES * math.asin(min(1.0, math.sqrt(h)))
 
     def travel_minutes(self, a: Location, b: Location) -> float:

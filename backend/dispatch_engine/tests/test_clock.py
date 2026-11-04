@@ -1,6 +1,9 @@
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from dispatch_engine.clock import Clock, FixedClock, SystemClock
 
@@ -9,7 +12,7 @@ FIXED_INSTANT = datetime(2026, 11, 3, 9, 0, tzinfo=timezone.utc)
 
 
 class TestFixedClock:
-    def test_now_returns_the_supplied_instant(self):
+    def test_now_returns_the_suppled_instant(self):
         clock = FixedClock(FIXED_INSTANT)
 
         assert clock.now() == FIXED_INSTANT
@@ -64,3 +67,32 @@ class TestClockProtocol:
         result = get_time(FixedClock(FIXED_INSTANT))
 
         assert result == FIXED_INSTANT
+
+
+class TestFixedClockIsDeterministic:
+    """The engine's invariant 14 (same input, same output) needs a clock that stands still."""
+
+    def test_it_does_not_follow_real_time(self):
+        clock = FixedClock(FIXED_INSTANT)
+
+        first = clock.now()
+        time.sleep(0.01)  # real time moves on; the fixed clock must not
+
+        assert clock.now() == first == FIXED_INSTANT
+
+    @given(st.datetimes(timezones=st.just(timezone.utc)))
+    def test_any_aware_instant_comes_back_unchanged_every_time(self, instant):
+        clock = FixedClock(instant)
+
+        assert clock.now() == instant
+        assert clock.now() == clock.now()
+
+    def test_a_function_of_now_gives_the_same_answer_on_every_run(self):
+        # Stands in for the engine until it exists: the S2-4 test repeats this
+        # with a whole plan (same FixedClock in, same Plan out).
+        def deadline(clock: Clock) -> datetime:
+            return clock.now() + timedelta(hours=1)
+
+        clock = FixedClock(FIXED_INSTANT)
+
+        assert deadline(clock) == deadline(clock) == FIXED_INSTANT + timedelta(hours=1)
