@@ -87,6 +87,7 @@ DEFAULT_TIMEZONE = "America/Chicago"
 class Organization(AddressMixin, models.Model):
     class ScoringStrategy(models.TextChoices):
         BALANCED = "balanced", "Balanced"
+        NEAREST = "nearest", "Nearest"
 
     name = models.CharField(max_length=255)
     email = models.EmailField(blank=True, default="")
