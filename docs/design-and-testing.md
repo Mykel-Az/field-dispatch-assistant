@@ -30,3 +30,22 @@ Rules the types enforce, because a wrong plan is worse than a crash:
   fixed time give the same plan. The engine reads it once per run.
 - `DistanceProvider` (`HaversineProvider`) gives miles and travel minutes
   (ADR-006). Straight-line distance, times a road factor of 1.3 for travel time.
+
+
+### Filter rules
+For one job, each technician is checked in this order; the first failure is
+the single reason recorded:
+1. available;
+2. shares at least one skill with the job (any-of, invariant 2);
+3. estimated arrival no later than shift end (ADR-012), inclusive.
+
+Estimated arrival is the latest of now, the technician's free time and shift
+start, plus travel. For a job with a slot it is never earlier than the slot
+opening. Results are in id order and do not depend on input order.
+
+### Job order and priority
+Jobs are assigned in this order: urgent first, then priority (high before
+low), then earliest deadline, then id. Earliest-deadline order keeps each
+technician's day moving forward in time. A job's window is fixed (agreed with
+the customer) or movable ("anytime that day", opening hours). Priority orders
+jobs; it is not used to pick the technician.

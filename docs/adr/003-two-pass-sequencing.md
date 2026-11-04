@@ -24,3 +24,19 @@ which case the earliest slot-feasible-by-distance job goes first.
 - Greedy, so it can miss better global orderings. Accepted (ADR-002).
 - Invariant #6 (no overlapping windows per technician) is testable as a
   property: for any generated input, sequenced windows never overlap.
+
+
+## Amendment (Nov 4): what a slot means for planning
+
+A slot is the appointment window agreed with the customer: the technician
+arrives inside it, and the job may run past `slot_end`, which is the SLA
+deadline. The planner never moves a fixed window earlier than `slot_start`,
+and it changes only by customer decision or an external factor. A job with no
+agreed time ("anytime that day") gets a movable window: the organization's
+opening hours for that day, marked `slot_is_fixed = false`. Only movable jobs
+may be rescheduled by the planner, and a replan proposes such moves to the
+dispatcher rather than applying them.
+
+**TIME:** Sprint 2 plans one pass in order of earliest deadline and does not
+fill gaps. The full-fidelity path is sequencing with fixed windows as anchors
+(Sprint 3). A per-job "customer must be present" setting is a further path.
