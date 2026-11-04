@@ -26,7 +26,9 @@ def _arrival(
     """When this technician would reach the job.
 
     They cannot leave before now, before they are free, or before their shift
-    starts. A job with a slot cannot be reached before the slot opens.
+    starts. For a job with a slot, the estimated arrival is never earlier than the
+    slot opening: the customer is only expected from then. A job without a slot is
+    planned as early as the technician can reach it.
     """
     start = max(now, tech.free_at, tech.shift_start)
     arrival = start + timedelta(minutes=travel_minutes)
