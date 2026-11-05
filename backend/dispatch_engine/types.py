@@ -106,9 +106,17 @@ class OrgConfig:
 
 
 class ReasonCode(StrEnum):
+    # why a technician was rejected (FILTER)
     SKILL_MISMATCH = "skill_mismatch"
     AFTER_CLOSING = "after_closing"
     UNAVAILABLE = "unavailable"
+    # why a job went to a technician (ASSIGN)
+    ASSIGNED = "assigned"
+    SLA_AT_RISK = "sla_at_risk"
+    SLA_BREACH = "sla_breach"
+    OVER_DAILY_TARGET = "over_daily_target"
+    # why a job went to nobody (ASSIGN)
+    NO_FEASIBLE_TECHNICIAN = "no_feasible_technician"
 
 
 @dataclass(frozen=True, slots=True)
