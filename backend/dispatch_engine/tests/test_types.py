@@ -14,6 +14,7 @@ from dispatch_engine.types import (
     Location,
     OrgConfig,
     Plan,
+    Priority,
     Reason,
     ReasonCode,
     SlaLabel,
@@ -216,3 +217,20 @@ def test_enum_values_are_the_strings_the_api_will_send():
 def test_types_are_frozen(obj, field):
     with pytest.raises(FrozenInstanceError):
         setattr(obj, field, "changed")
+
+
+# ---- priority and movable windows -------------------------------------------
+def test_priority_defaults_to_normal_and_the_window_to_fixed():
+    job = make_job()
+    assert job.priority == Priority.NORMAL
+    assert job.slot_is_fixed is True
+
+
+@pytest.mark.parametrize("priority", [0, 4, -1])
+def test_an_unknown_priority_is_refused(priority):
+    with pytest.raises(ValueError):
+        make_job(priority=priority)
+
+
+def test_a_movable_window_is_allowed():
+    assert make_job(slot_is_fixed=False).slot_is_fixed is False

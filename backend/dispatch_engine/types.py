@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 
 
 def _require_aware(name: str, value: datetime) -> None:
@@ -22,6 +22,14 @@ class Location:
             raise ValueError(f"Longitude must be between -180 and 180, got {self.lng}")
 
 
+class Priority(IntEnum):
+    """Orders jobs in ASSIGN. It is not used to choose the technician."""
+
+    LOW = 1
+    NORMAL = 2
+    HIGH = 3
+
+
 @dataclass(frozen=True, slots=True)
 class JobView:
     id: int
@@ -33,8 +41,11 @@ class JobView:
     slot_end: datetime | None
     duration_minutes: int
     acceptable_skill_ids: frozenset[int]
+    priority: Priority = Priority.NORMAL
+    slot_is_fixed: bool = True  # False for "anytime that day" jobs: their window is the opening hours and may be moved.
 
     def __post_init__(self):
+        Priority(self.priority)  # raises ValueError for anything but 1, 2 or 3
         _require_aware("created_at", self.created_at)
         if (self.slot_start is None) != (self.slot_end is None):
             raise ValueError("slot_start and slot_end must be set together")
@@ -169,3 +180,21 @@ class Rejection:
 class FilterResult:
     feasible: tuple[Candidate, ...]
     rejected: tuple[Rejection, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Scored:
+    """A feasible technician with the numbers ASSIGN needs. Lower cost ranks first."""
+
+    technician_id: int
+    estimated_arrival: datetime
+    travel_minutes: float
+    slack_minutes: float
+    sla_label: SlaLabel
+    risk: float  # internal 0-1, for ranking only
+    cost: float
+
+    def __post_init__(self):
+        _require_aware("estimated_arrival", self.estimated_arrival)
+        if not 0.0 <= self.risk <= 1.0:
+            raise ValueError("risk must be between 0 and 1")
