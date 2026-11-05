@@ -7,7 +7,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from dispatch_engine.scoring import (
-    OVER_TARGET_MINUTES,
+    BALANCED_WEIGHTS,
     RISK_HORIZON_FACTOR,
     STRATEGIES,
     deadline_for,
@@ -124,7 +124,7 @@ def test_going_over_the_daily_target_costs_more_but_is_not_forbidden():
         make_job(), [one], [make_tech(id=1, assigned_count=1)], config
     )
     assert len(at_target) == 1  # still a candidate
-    assert at_target[0].cost - under[0].cost >= OVER_TARGET_MINUTES
+    assert at_target[0].cost - under[0].cost >= BALANCED_WEIGHTS.over_target
 
 
 def test_equal_costs_are_ranked_by_technician_id():
@@ -132,6 +132,44 @@ def test_equal_costs_are_ranked_by_technician_id():
     techs = [make_tech(id=i) for i in (3, 1, 2)]
     ranked = score_candidates(make_job(), candidates, techs, make_config())
     assert [s.technician_id for s in ranked] == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    "idle_travel, expected_first",
+    [
+        (
+            18,
+            2,
+        ),  # the idle technician is 8 minutes farther: within the band, so load wins
+        (21, 1),  # 11 minutes farther: beyond the band, so the closest wins
+    ],
+)
+def test_nearest_lets_load_outweigh_about_ten_minutes_of_driving(
+    idle_travel, expected_first
+):
+    candidates = [
+        make_candidate(technician_id=1, travel_minutes=10),  # three jobs already
+        make_candidate(technician_id=2, travel_minutes=idle_travel),  # idle
+    ]
+    techs = [make_tech(id=1, assigned_count=3), make_tech(id=2, assigned_count=0)]
+    config = make_config(scoring_strategy="nearest")
+    ranked = score_candidates(make_job(), candidates, techs, config)
+    assert ranked[0].technician_id == expected_first
+
+
+@pytest.mark.parametrize("name", ["nearest", "balanced"])
+def test_every_strategy_counts_every_factor(name):
+    """More travel, more load, going over target or more risk never makes a technician cheaper."""
+    strategy = get_strategy(name)
+    config = make_config(max_jobs_per_tech_per_day=2)
+    base = {"travel_minutes": 10.0, "assigned_count": 0, "risk": 0.0, "config": config}
+    cost = strategy.cost(**base)
+    assert strategy.cost(**{**base, "travel_minutes": 20.0}) > cost
+    assert strategy.cost(**{**base, "assigned_count": 1}) > cost
+    assert strategy.cost(**{**base, "assigned_count": 2}) > strategy.cost(
+        **{**base, "assigned_count": 1}
+    )
+    assert strategy.cost(**{**base, "risk": 1.0}) > cost
 
 
 # ---- registry ---------------------------------------------------------------

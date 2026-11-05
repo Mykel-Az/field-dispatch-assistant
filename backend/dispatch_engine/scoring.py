@@ -6,6 +6,7 @@ Standard library only.
 """
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Protocol
@@ -15,14 +16,6 @@ from .types import Candidate, JobView, OrgConfig, Scored, SlaLabel, TechView
 # Risk falls from 1 (no slack) to 0 at this many times the "at risk" threshold.
 # TIME: an estimate, tunable; the benchmark week is the place to tune it.
 RISK_HORIZON_FACTOR = 4.0
-
-# Balanced strategy weights, in minutes of travel they are worth. TIME: estimates,
-# tunable. Every job a technician already has costs like 15 minutes of driving;
-# going over the daily job target is a soft preference, not a hard cap, so it only
-# adds cost (S2-4's "soft max jobs"); a risky arrival costs up to an hour.
-WORKLOAD_MINUTES_PER_JOB = 15.0
-OVER_TARGET_MINUTES = 60.0
-RISK_MINUTES = 60.0
 
 
 def deadline_for(job: JobView, travel_minutes: float, config: OrgConfig) -> datetime:
@@ -70,8 +63,33 @@ class ScoringStrategy(Protocol):
     ) -> float: ...
 
 
-class NearestStrategy:
-    """The closest technician wins, whatever their load."""
+@dataclass(frozen=True, slots=True)
+class Weights:
+    """What each factor is worth, in minutes of travel.
+
+    Every strategy counts every factor; strategies differ only in emphasis. TIME:
+    these numbers are estimates, tunable; the benchmark week is the place to tune.
+    """
+
+    travel: float  # per minute of driving
+    per_job: float  # per job the technician already has
+    over_target: float  # extra when at or over the daily job target (soft, not a cap)
+    risk: float  # times the internal 0-1 risk of a tight arrival
+
+
+# Closest technician wins, unless another is within about 10 minutes of driving and
+# clearly less loaded: three extra jobs, being at the daily target, or a tight
+# arrival each count for roughly 10 minutes.
+NEAREST_WEIGHTS = Weights(travel=1.0, per_job=3.0, over_target=10.0, risk=10.0)
+# Distance, but also how busy the technician is and how tight the arrival is.
+BALANCED_WEIGHTS = Weights(travel=1.0, per_job=15.0, over_target=60.0, risk=60.0)
+
+
+class WeightedStrategy:
+    """cost = weighted sum of travel, load, over-target and risk."""
+
+    def __init__(self, weights: Weights) -> None:
+        self.weights = weights
 
     def cost(
         self,
@@ -81,33 +99,23 @@ class NearestStrategy:
         risk: float,
         config: OrgConfig,
     ) -> float:
-        return travel_minutes
-
-
-class BalancedStrategy:
-    """Distance, but also how busy the technician is and how tight the arrival is."""
-
-    def cost(
-        self,
-        *,
-        travel_minutes: float,
-        assigned_count: int,
-        risk: float,
-        config: OrgConfig,
-    ) -> float:
+        w = self.weights
         over_target = assigned_count >= config.max_jobs_per_tech_per_day
         return (
-            travel_minutes
-            + WORKLOAD_MINUTES_PER_JOB * assigned_count
-            + (OVER_TARGET_MINUTES if over_target else 0.0)
-            + RISK_MINUTES * risk
+            w.travel * travel_minutes
+            + w.per_job * assigned_count
+            + (w.over_target if over_target else 0.0)
+            + w.risk * risk
         )
 
 
 # Keyed by Organization.scoring_strategy. Keep in step with that field's choices
 # (a test in api/tests guards this).
 STRATEGIES: Mapping[str, ScoringStrategy] = MappingProxyType(
-    {"nearest": NearestStrategy(), "balanced": BalancedStrategy()}
+    {
+        "nearest": WeightedStrategy(NEAREST_WEIGHTS),
+        "balanced": WeightedStrategy(BALANCED_WEIGHTS),
+    }
 )
 
 
