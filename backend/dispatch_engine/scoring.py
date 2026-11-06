@@ -73,20 +73,19 @@ class Weights:
 
     travel: float  # per minute of driving
     per_job: float  # per job the technician already has
-    over_target: float  # extra when at or over the daily job target (soft, not a cap)
     risk: float  # times the internal 0-1 risk of a tight arrival
 
 
 # Closest technician wins, unless another is within about 10 minutes of driving and
-# clearly less loaded: three extra jobs, being at the daily target, or a tight
-# arrival each count for roughly 10 minutes.
-NEAREST_WEIGHTS = Weights(travel=1.0, per_job=3.0, over_target=10.0, risk=10.0)
+# clearly less loaded: three extra jobs or a tight arrival each count for roughly
+# 10 minutes. (The daily job limit is not a weight: it is a hard rule, ADR-022.)
+NEAREST_WEIGHTS = Weights(travel=1.0, per_job=3.0, risk=10.0)
 # Distance, but also how busy the technician is and how tight the arrival is.
-BALANCED_WEIGHTS = Weights(travel=1.0, per_job=15.0, over_target=60.0, risk=60.0)
+BALANCED_WEIGHTS = Weights(travel=1.0, per_job=15.0, risk=60.0)
 
 
 class WeightedStrategy:
-    """cost = weighted sum of travel, load, over-target and risk."""
+    """cost = weighted sum of travel, load and risk."""
 
     def __init__(self, weights: Weights) -> None:
         self.weights = weights
@@ -100,13 +99,7 @@ class WeightedStrategy:
         config: OrgConfig,
     ) -> float:
         w = self.weights
-        over_target = assigned_count >= config.max_jobs_per_tech_per_day
-        return (
-            w.travel * travel_minutes
-            + w.per_job * assigned_count
-            + (w.over_target if over_target else 0.0)
-            + w.risk * risk
-        )
+        return w.travel * travel_minutes + w.per_job * assigned_count + w.risk * risk
 
 
 # Keyed by Organization.scoring_strategy. Keep in step with that field's choices

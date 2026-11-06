@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser, BaseUserManager
-from django.core.validators import MinValueValidator, RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Lower
@@ -102,6 +102,9 @@ class Organization(AddressMixin, models.Model):
     work_end = models.TimeField(blank=True, null=True)
     scoring_strategy = models.CharField(
         max_length=20, choices=ScoringStrategy.choices, default=ScoringStrategy.BALANCED
+    )
+    max_jobs_per_tech_per_day = models.PositiveSmallIntegerField(
+        default=3, validators=[MinValueValidator(1), MaxValueValidator(10)]
     )
 
     version = models.PositiveIntegerField(default=1)
@@ -278,6 +281,7 @@ class Job(AddressMixin, TenantScopedModel):
     arrived_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     attempt_count = models.PositiveSmallIntegerField(default=0)
+    plan_explanation = models.JSONField(null=True, blank=True)
     version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -348,8 +352,6 @@ class JobStatusHistory(TenantScopedModel):
     job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="history")
     from_status = models.CharField(max_length=20, blank=True)
     to_status = models.CharField(max_length=20, choices=JobStatus.choices)
-    # The technician involved in this change: the one assigned, or the one
-    # released. Kept here because the job row forgets them once unassigned.
     technician = models.ForeignKey(
         Technician, null=True, blank=True, on_delete=models.PROTECT
     )

@@ -196,13 +196,97 @@ def test_a_job_that_cannot_make_its_window_is_still_assigned_and_flagged():
     assert ReasonCode.SLA_BREACH in [r.code for r in a.explanation.reasons]
 
 
-def test_going_over_the_daily_target_is_allowed_and_recorded():
-    tech = make_tech(assigned_count=4)
-    plan = run([job(1)], [tech], make_config(max_jobs_per_tech_per_day=4))
-    assert assigned(plan) == {1: 1}
-    assert ReasonCode.OVER_DAILY_TARGET in [
-        r.code for r in plan.assignments[0].explanation.reasons
+# ---- the daily limit (ADR-022) -----------------------------------------------
+def codes(explanation):
+    return [r.code for r in explanation.reasons]
+
+
+def test_a_normal_job_never_goes_to_a_technician_at_the_limit():
+    plan = run(
+        [job(1)],
+        [make_tech(assigned_count=3)],
+        make_config(max_jobs_per_tech_per_day=3),
+    )
+    assert plan.assignments == ()
+    assert ReasonCode.DAILY_LIMIT in codes(plan.unassigned[0].explanation)
+
+
+def test_a_normal_job_goes_to_the_technician_under_the_limit_even_if_farther():
+    near, far = Location(30.3, -97.7), Location(31.0, -97.7)
+    techs = [
+        make_tech(id=1, position=near, assigned_count=3),
+        make_tech(id=2, position=far),
     ]
+    plan = run(
+        [job(10)],
+        techs,
+        make_config(scoring_strategy="nearest", max_jobs_per_tech_per_day=3),
+        ByPosition({near: 2, far: 40}),
+    )
+    assert assigned(plan) == {10: 2}
+
+
+def test_the_limit_fills_up_during_the_run():
+    jobs = [job(i, end=480) for i in (1, 2, 3, 4)]
+    plan = run(jobs, [make_tech()], make_config(max_jobs_per_tech_per_day=3))
+    assert len(plan.assignments) == 3
+    assert [u.job_id for u in plan.unassigned] == [4]
+
+
+def test_an_urgent_job_prefers_a_technician_under_the_limit_even_if_farther():
+    near, far = Location(30.3, -97.7), Location(30.5, -97.7)
+    techs = [
+        make_tech(id=1, position=near, assigned_count=3),
+        make_tech(id=2, position=far),
+    ]
+    plan = run(
+        [urgent(10)],
+        techs,
+        make_config(scoring_strategy="nearest", max_jobs_per_tech_per_day=3),
+        ByPosition({near: 2, far: 10}),
+    )
+    assert assigned(plan) == {10: 2}
+    assert ReasonCode.URGENT_OVER_LIMIT not in codes(plan.assignments[0].explanation)
+
+
+def test_an_urgent_job_goes_over_the_limit_when_all_technicians_are_at_it():
+    techs = [make_tech(id=1, assigned_count=3), make_tech(id=2, assigned_count=3)]
+    plan = run([urgent(10)], techs, make_config(max_jobs_per_tech_per_day=3))
+    assert len(plan.assignments) == 1
+    reasons = plan.assignments[0].explanation.reasons
+    over = next(r for r in reasons if r.code == ReasonCode.URGENT_OVER_LIMIT)
+    assert over.facts["under_limit_candidates"] == 0
+
+
+def test_an_urgent_job_goes_over_the_limit_when_the_others_would_be_late():
+    """Technician 1 is under the limit but busy for 50 minutes; technician 2 is free."""
+    techs = [
+        make_tech(id=1, assigned_count=1, free_at=at(50)),
+        make_tech(id=2, assigned_count=3),
+    ]
+    plan = run([urgent(10)], techs, make_config(max_jobs_per_tech_per_day=3))
+    assert assigned(plan) == {10: 2}
+    reasons = plan.assignments[0].explanation.reasons
+    over = next(r for r in reasons if r.code == ReasonCode.URGENT_OVER_LIMIT)
+    assert over.facts["under_limit_candidates"] == 1
+
+
+def test_an_urgent_job_stays_under_the_limit_when_going_over_would_not_help():
+    """Both would be equally late, so there is no reason to overload anyone."""
+    techs = [
+        make_tech(id=1, assigned_count=1, free_at=at(50)),
+        make_tech(id=2, assigned_count=3, free_at=at(50)),
+    ]
+    plan = run([urgent(10)], techs, make_config(max_jobs_per_tech_per_day=3))
+    assert assigned(plan) == {10: 1}
+
+
+def test_an_urgent_job_still_fits_after_the_normal_jobs_filled_the_limit():
+    jobs = [job(1, end=480), job(2, end=480), urgent(3)]
+    plan = run(jobs, [make_tech()], make_config(max_jobs_per_tech_per_day=2))
+    assert {3, 1}.issubset({a.job_id for a in plan.assignments})
+    assert len(plan.assignments) == 2  # the urgent one first, then one normal job
+    assert [u.job_id for u in plan.unassigned] == [2]
 
 
 # ---- bad input --------------------------------------------------------------
@@ -369,6 +453,19 @@ def test_the_plan_does_not_depend_on_input_order(
     rnd.shuffle(shuffled_techs)
     assert run(shuffled_jobs, shuffled_techs, distance=StubDistance(travel)) == first
     assert run(jobs, techs, distance=StubDistance(travel)) == first
+
+
+@given(scenarios())
+def test_a_normal_job_is_never_given_to_a_technician_at_the_limit(scenario):  # ADR-022
+    jobs, techs, travel = scenario
+    config = make_config()
+    plan = run(jobs, techs, config, StubDistance(travel))
+    urgent_ids = {j.id for j in jobs if j.is_urgent}
+    load = {t.id: t.assigned_count for t in techs}
+    for a in plan.assignments:  # in the order they were planned
+        if a.job_id not in urgent_ids:
+            assert load[a.technician_id] < config.max_jobs_per_tech_per_day
+        load[a.technician_id] += 1
 
 
 @given(scenarios())

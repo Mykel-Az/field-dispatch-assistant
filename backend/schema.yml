@@ -950,7 +950,6 @@ components:
           allOf:
           - $ref: '#/components/schemas/JobTechnician'
           readOnly: true
-          nullable: true
         scheduled_date:
           type: string
           format: date
@@ -988,20 +987,6 @@ components:
       - status
       - technician
       - title
-    JobActor:
-      type: object
-      description: Who made a change. A system action has no actor (changed_by is
-        null).
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        full_name:
-          type: string
-          readOnly: true
-      required:
-      - full_name
-      - id
     JobAssign:
       type: object
       properties:
@@ -1109,7 +1094,6 @@ components:
           allOf:
           - $ref: '#/components/schemas/JobTechnician'
           readOnly: true
-          nullable: true
         scheduled_date:
           type: string
           format: date
@@ -1210,10 +1194,10 @@ components:
           type: string
           readOnly: true
         changed_by:
-          allOf:
-          - $ref: '#/components/schemas/JobActor'
-          readOnly: true
+          type: object
+          additionalProperties: {}
           nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1397,6 +1381,10 @@ components:
           nullable: true
         scoring_strategy:
           $ref: '#/components/schemas/ScoringStrategyEnum'
+        max_jobs_per_tech_per_day:
+          type: integer
+          maximum: 10
+          minimum: 1
         is_configured:
           type: boolean
           readOnly: true
@@ -1573,6 +1561,10 @@ components:
           nullable: true
         scoring_strategy:
           $ref: '#/components/schemas/ScoringStrategyEnum'
+        max_jobs_per_tech_per_day:
+          type: integer
+          maximum: 10
+          minimum: 1
         is_configured:
           type: boolean
           readOnly: true
@@ -1642,8 +1634,11 @@ components:
     ScoringStrategyEnum:
       enum:
       - balanced
+      - nearest
       type: string
-      description: '* `balanced` - Balanced'
+      description: |-
+        * `balanced` - Balanced
+        * `nearest` - Nearest
     SetPassword:
       type: object
       properties:

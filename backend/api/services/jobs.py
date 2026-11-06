@@ -210,6 +210,7 @@ def transition(job, to, actor, reason="", *, technician=None, client_version=Non
             locked.technician = None
             locked.sequence_position = None
             locked.estimated_arrival = None
+            locked.plan_explanation = None
         now = timezone.now()
         if to == lc.ONGOING:
             locked.arrived_at = now

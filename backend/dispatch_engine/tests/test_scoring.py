@@ -7,7 +7,6 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from dispatch_engine.scoring import (
-    BALANCED_WEIGHTS,
     RISK_HORIZON_FACTOR,
     STRATEGIES,
     deadline_for,
@@ -114,19 +113,6 @@ def test_balanced_prefers_the_free_technician_over_a_slightly_closer_busy_one():
     assert [s.technician_id for s in ranked] == [2, 1]
 
 
-def test_going_over_the_daily_target_costs_more_but_is_not_forbidden():
-    config = make_config(max_jobs_per_tech_per_day=2)
-    one = make_candidate(technician_id=1)
-    at_target = score_candidates(
-        make_job(), [one], [make_tech(id=1, assigned_count=2)], config
-    )
-    under = score_candidates(
-        make_job(), [one], [make_tech(id=1, assigned_count=1)], config
-    )
-    assert len(at_target) == 1  # still a candidate
-    assert at_target[0].cost - under[0].cost >= BALANCED_WEIGHTS.over_target
-
-
 def test_equal_costs_are_ranked_by_technician_id():
     candidates = [make_candidate(technician_id=i) for i in (3, 1, 2)]
     techs = [make_tech(id=i) for i in (3, 1, 2)]
@@ -159,16 +145,13 @@ def test_nearest_lets_load_outweigh_about_ten_minutes_of_driving(
 
 @pytest.mark.parametrize("name", ["nearest", "balanced"])
 def test_every_strategy_counts_every_factor(name):
-    """More travel, more load, going over target or more risk never makes a technician cheaper."""
+    """More travel, more load or more risk never makes a technician cheaper."""
     strategy = get_strategy(name)
-    config = make_config(max_jobs_per_tech_per_day=2)
+    config = make_config()
     base = {"travel_minutes": 10.0, "assigned_count": 0, "risk": 0.0, "config": config}
     cost = strategy.cost(**base)
     assert strategy.cost(**{**base, "travel_minutes": 20.0}) > cost
     assert strategy.cost(**{**base, "assigned_count": 1}) > cost
-    assert strategy.cost(**{**base, "assigned_count": 2}) > strategy.cost(
-        **{**base, "assigned_count": 1}
-    )
     assert strategy.cost(**{**base, "risk": 1.0}) > cost
 
 
