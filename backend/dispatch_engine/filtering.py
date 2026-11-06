@@ -46,13 +46,17 @@ def filter_technicians(
     technicians: Iterable[TechView],
     distance: DistanceProvider,
     now: datetime,
+    daily_limit: int | None = None,
 ) -> FilterResult:
     """Split technicians into those who can take the job and those who cannot.
 
     Rules, checked in this order (the first failure is the one reason given):
       1. available;
       2. at least one skill in common with the job (any-of, invariant 2);
-      3. arrival no later than the end of their shift (ADR-012).
+      3. a normal job only: the technician is under the daily job limit (ADR-022);
+         an urgent job may go over it, so ASSIGN decides that case;
+      4. arrival no later than the end of their shift (ADR-012).
+    `daily_limit=None` means no limit.
     """
     feasible: list[Candidate] = []
     rejected: list[Rejection] = []
@@ -64,6 +68,21 @@ def filter_technicians(
 
         if not tech.skill_ids & job.acceptable_skill_ids:
             rejected.append(_reject(tech, ReasonCode.SKILL_MISMATCH, job_id=job.id))
+            continue
+
+        if (
+            daily_limit is not None
+            and not job.is_urgent
+            and tech.assigned_count >= daily_limit
+        ):
+            rejected.append(
+                _reject(
+                    tech,
+                    ReasonCode.DAILY_LIMIT,
+                    assigned_count=tech.assigned_count,
+                    limit=daily_limit,
+                )
+            )
             continue
 
         travel = distance.travel_minutes(tech.position, job.location)

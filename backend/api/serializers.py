@@ -231,6 +231,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "work_start",
             "work_end",
             "scoring_strategy",
+            "max_jobs_per_tech_per_day",
             "is_configured",
             "version",
         ]

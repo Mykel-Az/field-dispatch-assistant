@@ -29,6 +29,7 @@ def explain_assignment(
     tech: TechView,
     config: OrgConfig,
     feasible_count: int,
+    under_limit_count: int,
     rejected: Iterable[Rejection],
 ) -> Explanation:
     """Why this technician got this job. Minutes are whole numbers, so the text matches the facts."""
@@ -51,13 +52,15 @@ def explain_assignment(
     elif chosen.sla_label == SlaLabel.BREACH:
         reasons.append(Reason(ReasonCode.SLA_BREACH, {"late_minutes": -slack}))
     if tech.assigned_count >= config.max_jobs_per_tech_per_day:
+        # Only an urgent job can get here: FILTER keeps normal jobs under the limit.
         reasons.append(
             Reason(
-                ReasonCode.OVER_DAILY_TARGET,
+                ReasonCode.URGENT_OVER_LIMIT,
                 {
                     "technician_id": tech.id,
                     "assigned_count": tech.assigned_count,
-                    "target": config.max_jobs_per_tech_per_day,
+                    "limit": config.max_jobs_per_tech_per_day,
+                    "under_limit_candidates": under_limit_count,
                 },
             )
         )
@@ -111,10 +114,16 @@ def assignment_sentence(
         parts.append(
             f"Best of {chosen['candidates']} available technicians ({chosen['strategy']} strategy)."
         )
-    over = _first(why, ReasonCode.OVER_DAILY_TARGET)
+    over = _first(why, ReasonCode.URGENT_OVER_LIMIT)
     if over:
+        others = (
+            "no technician under the limit could take it"
+            if over["under_limit_candidates"] == 0
+            else "technicians under the limit would arrive later"
+        )
         parts.append(
-            f"{label} already has {over['assigned_count']} jobs today (target {over['target']})."
+            f"{label} already has {over['assigned_count']} jobs today (limit {over['limit']}),"
+            f" but this job is urgent and {others}."
         )
     return " ".join(parts)
 
@@ -125,6 +134,8 @@ def _why_not(reason: Reason, label: str) -> str:
         return f"{label} is unavailable"
     if reason.code == ReasonCode.SKILL_MISMATCH:
         return f"{label} does not have a matching skill"
+    if reason.code == ReasonCode.DAILY_LIMIT:
+        return f"{label} has reached the daily limit of {facts['limit']} jobs"
     if reason.code == ReasonCode.AFTER_CLOSING:
         return (
             f"{label} would arrive {facts['minutes_after_closing']:g} min after closing"

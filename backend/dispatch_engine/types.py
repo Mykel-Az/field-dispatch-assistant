@@ -110,11 +110,12 @@ class ReasonCode(StrEnum):
     SKILL_MISMATCH = "skill_mismatch"
     AFTER_CLOSING = "after_closing"
     UNAVAILABLE = "unavailable"
+    DAILY_LIMIT = "daily_limit"
     # why a job went to a technician (ASSIGN)
     ASSIGNED = "assigned"
     SLA_AT_RISK = "sla_at_risk"
     SLA_BREACH = "sla_breach"
-    OVER_DAILY_TARGET = "over_daily_target"
+    URGENT_OVER_LIMIT = "urgent_over_limit"
     # why a job went to nobody (ASSIGN)
     NO_FEASIBLE_TECHNICIAN = "no_feasible_technician"
 

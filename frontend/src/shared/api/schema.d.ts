@@ -508,7 +508,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"] | null;
+            readonly technician: components["schemas"]["JobTechnician"];
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -517,11 +517,6 @@ export interface components {
             readonly slot_end: string | null;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
-        };
-        /** @description Who made a change. A system action has no actor (changed_by is null). */
-        JobActor: {
-            readonly id: number;
-            readonly full_name: string;
         };
         JobAssign: {
             technician_id: number;
@@ -558,7 +553,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"] | null;
+            readonly technician: components["schemas"]["JobTechnician"];
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -585,7 +580,9 @@ export interface components {
             readonly from_status: string;
             readonly to_status: components["schemas"]["JobStatusEnum"];
             readonly reason: string;
-            readonly changed_by: components["schemas"]["JobActor"] | null;
+            readonly changed_by: {
+                [key: string]: unknown;
+            } | null;
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -651,6 +648,7 @@ export interface components {
             /** Format: time */
             work_end?: string | null;
             scoring_strategy?: components["schemas"]["ScoringStrategyEnum"];
+            max_jobs_per_tech_per_day?: number;
             readonly is_configured: boolean;
             version: number;
         };
@@ -724,6 +722,7 @@ export interface components {
             /** Format: time */
             work_end?: string | null;
             scoring_strategy?: components["schemas"]["ScoringStrategyEnum"];
+            max_jobs_per_tech_per_day?: number;
             readonly is_configured?: boolean;
             version?: number;
         };
@@ -756,9 +755,10 @@ export interface components {
         RoleEnum: "head_dispatcher" | "dispatcher" | "technician";
         /**
          * @description * `balanced` - Balanced
+         *     * `nearest` - Nearest
          * @enum {string}
          */
-        ScoringStrategyEnum: "balanced";
+        ScoringStrategyEnum: "balanced" | "nearest";
         SetPassword: {
             new_password: string;
         };

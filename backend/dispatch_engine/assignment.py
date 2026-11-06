@@ -6,6 +6,10 @@ each technician's day moving forward in time, so a 9 am job is not planned after
 3 pm one. After each assignment the technician's free time, position and load are
 updated, so later jobs in the same run see them. The result does not depend on the
 order the jobs or technicians are passed in (invariant 14). Standard library only.
+
+Daily limit (ADR-022): a normal job never goes to a technician who already has the
+limit. An urgent job may, but only when the technicians under the limit would be
+later (a worse SLA label) than a technician at the limit.
 """
 
 from collections.abc import Iterable
@@ -17,7 +21,18 @@ from .distance import DistanceProvider
 from .explanations import explain_assignment, explain_unassigned
 from .filtering import filter_technicians
 from .scoring import score_candidates
-from .types import Assignment, JobView, OrgConfig, Plan, TechView, Unassigned
+from .types import (
+    Assignment,
+    JobView,
+    OrgConfig,
+    Plan,
+    Scored,
+    SlaLabel,
+    TechView,
+    Unassigned,
+)
+
+_LABEL_RANK = {SlaLabel.OK: 0, SlaLabel.AT_RISK: 1, SlaLabel.BREACH: 2}
 
 
 def _order_key(job: JobView, config: OrgConfig) -> tuple[bool, int, datetime, int]:
@@ -33,6 +48,34 @@ def _order_key(job: JobView, config: OrgConfig) -> tuple[bool, int, datetime, in
 def _require_unique(kind: str, ids: list[int]) -> None:
     if len(ids) != len(set(ids)):
         raise ValueError(f"duplicate {kind} ids in the input")
+
+
+def _choose(
+    job: JobView, ranked: tuple[Scored, ...], current: dict[int, TechView], limit: int
+) -> tuple[Scored, int]:
+    """The candidate to give the job to, and how many candidates were under the limit.
+
+    A normal job only ever sees technicians under the limit (FILTER removed the
+    rest), so the best-ranked one wins. An urgent job prefers the best technician
+    under the limit and goes to one at the limit only when that is clearly better
+    for the deadline: none are under the limit, or the best of them would be later
+    (a worse label) than a technician at the limit.
+    """
+    under = [s for s in ranked if current[s.technician_id].assigned_count < limit]
+    if not job.is_urgent:
+        return ranked[0], len(under)
+    if not under:
+        return ranked[0], 0
+    best = under[0]
+    at_limit = [
+        s
+        for s in ranked
+        if current[s.technician_id].assigned_count >= limit
+        and _LABEL_RANK[s.sla_label] < _LABEL_RANK[best.sla_label]
+    ]
+    if at_limit:
+        return min(at_limit, key=lambda s: _LABEL_RANK[s.sla_label]), len(under)
+    return best, len(under)
 
 
 def assign_jobs(
@@ -53,7 +96,13 @@ def assign_jobs(
     unassigned: list[Unassigned] = []
 
     for job in sorted(jobs, key=lambda j: _order_key(j, config)):
-        filtered = filter_technicians(job, current.values(), distance, now)
+        filtered = filter_technicians(
+            job,
+            current.values(),
+            distance,
+            now,
+            daily_limit=config.max_jobs_per_tech_per_day,
+        )
         if not filtered.feasible:
             unassigned.append(
                 Unassigned(
@@ -63,7 +112,9 @@ def assign_jobs(
             continue
 
         ranked = score_candidates(job, filtered.feasible, current.values(), config)
-        best = ranked[0]
+        best, under_limit = _choose(
+            job, ranked, current, config.max_jobs_per_tech_per_day
+        )
         tech = current[best.technician_id]
         assignments.append(
             Assignment(
@@ -74,7 +125,7 @@ def assign_jobs(
                 sla_label=best.sla_label,
                 risk=best.risk,
                 explanation=explain_assignment(
-                    job, best, tech, config, len(ranked), filtered.rejected
+                    job, best, tech, config, len(ranked), under_limit, filtered.rejected
                 ),
             )
         )

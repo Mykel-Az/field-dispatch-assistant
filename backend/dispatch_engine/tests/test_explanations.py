@@ -63,10 +63,24 @@ def test_a_late_arrival_says_how_late():
     assert "7 min after the deadline" in sentence
 
 
-def test_being_over_the_daily_target_is_mentioned():
+def test_an_urgent_job_over_the_limit_says_why():
+    rush = make_job(
+        id=1, label="Gas leak", is_urgent=True, slot_start=None, slot_end=None
+    )
     techs = [make_tech(id=1, label="Sam", assigned_count=4)]
-    (sentence,), _ = sentences(plan_for([JOB], techs), [JOB], techs)
-    assert "Sam already has 4 jobs today (target 4)." in sentence
+    (sentence,), _ = sentences(plan_for([rush], techs), [rush], techs)
+    assert (
+        "Sam already has 4 jobs today (limit 4), but this job is urgent"
+        " and no technician under the limit could take it." in sentence
+    )
+
+
+def test_a_technician_at_the_limit_is_named_in_the_unassigned_sentence():
+    techs = [make_tech(id=1, label="Sam", assigned_count=4)]
+    _, (sentence,) = sentences(plan_for([JOB], techs), [JOB], techs)
+    assert sentence == (
+        "No technician can take \u201cAC not cooling\u201d: Sam has reached the daily limit of 4 jobs."
+    )
 
 
 def test_an_unassigned_job_names_every_technician_and_why():
@@ -90,7 +104,7 @@ def test_no_technicians_has_its_own_sentence():
 def test_every_number_in_a_sentence_is_in_the_facts():
     """The explanation of record is the facts; the text may not invent a number."""
     techs = [
-        make_tech(id=1, label="Sam", assigned_count=4),
+        make_tech(id=1, label="Sam"),
         make_tech(id=2, label="Alex", is_available=False),
     ]
     tight = make_job(id=1, label="AC not cooling", slot_start=at(0), slot_end=at(20))
