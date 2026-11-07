@@ -210,6 +210,9 @@ def transition(job, to, actor, reason="", *, technician=None, client_version=Non
             locked.technician = None
             locked.sequence_position = None
             locked.estimated_arrival = None
+        if to in (lc.ASSIGNED, lc.UNASSIGNED, lc.CANCELED):
+            # An old "why" must not outlive the decision it explained. The planner
+            # writes the new one right after it assigns.
             locked.plan_explanation = None
         now = timezone.now()
         if to == lc.ONGOING:

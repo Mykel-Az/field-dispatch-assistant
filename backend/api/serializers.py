@@ -1,3 +1,4 @@
+import datetime
 import re
 
 from django.contrib.auth import authenticate, get_user_model
@@ -277,7 +278,7 @@ class JobTechnicianSerializer(serializers.ModelSerializer):
 class JobSerializer(serializers.ModelSerializer):
     """The list row. No lat/lng on purpose: nobody types or reads coordinates."""
 
-    technician = JobTechnicianSerializer(read_only=True)
+    technician = JobTechnicianSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Job
@@ -300,8 +301,17 @@ class JobSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class JobActorSerializer(serializers.ModelSerializer):
+    """Who made a change. A system action has no actor (changed_by is null)."""
+
+    class Meta:
+        model = User
+        fields = ["id", "full_name"]
+        read_only_fields = fields
+
+
 class JobHistorySerializer(serializers.ModelSerializer):
-    changed_by = serializers.SerializerMethodField()
+    changed_by = JobActorSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = JobStatusHistory
@@ -314,10 +324,6 @@ class JobHistorySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
-
-    def get_changed_by(self, obj) -> dict | None:
-        user = obj.changed_by
-        return None if user is None else {"id": user.id, "full_name": user.full_name}
 
 
 class JobDetailSerializer(JobSerializer):
@@ -501,6 +507,62 @@ class JobAssignSerializer(serializers.Serializer):
 
 class JobUnassignSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
+
+
+MAX_PLAN_DAYS_AHEAD = 7  # the week-ahead lookahead (ADR-010)
+
+
+class ScheduleGenerateSerializer(serializers.Serializer):
+    """POST /schedule/generate/. `date` defaults to today on the organization's clock."""
+
+    date = serializers.DateField(required=False)
+
+    def validate_date(self, value):
+        organization = self.context["request"].user.organization
+        today = job_service.local_date(None, organization.timezone)
+        if value < today:
+            raise serializers.ValidationError("Cannot plan a day that has passed.")
+        if value > today + datetime.timedelta(days=MAX_PLAN_DAYS_AHEAD):
+            raise serializers.ValidationError(
+                f"Cannot plan more than {MAX_PLAN_DAYS_AHEAD} days ahead."
+            )
+        return value
+
+
+class PlanReasonSerializer(serializers.Serializer):
+    """One structured reason: a code and the numbers behind it."""
+
+    code = serializers.CharField()
+    facts = serializers.DictField()
+
+
+class PlannedJobSerializer(serializers.Serializer):
+    job_id = serializers.IntegerField()
+    technician_id = serializers.IntegerField()
+    estimated_arrival = serializers.DateTimeField()
+    sla_label = serializers.CharField()
+    slack_minutes = serializers.FloatField()
+    reasons = PlanReasonSerializer(many=True)
+    sentence = serializers.CharField()
+
+
+class UnplannedJobSerializer(serializers.Serializer):
+    job_id = serializers.IntegerField()
+    reasons = PlanReasonSerializer(many=True)
+    sentence = serializers.CharField()
+
+
+class SkippedJobSerializer(serializers.Serializer):
+    job_id = serializers.IntegerField()
+    code = serializers.CharField()
+    sentence = serializers.CharField()
+
+
+class ScheduleResultSerializer(serializers.Serializer):
+    plan_date = serializers.DateField()
+    assigned = PlannedJobSerializer(many=True)
+    unassigned = UnplannedJobSerializer(many=True)
+    skipped = SkippedJobSerializer(many=True)
 
 
 class GeocodeLookupSerializer(serializers.Serializer):

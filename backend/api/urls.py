@@ -11,6 +11,7 @@ from .views import (
     MeView,
     OrganizationView,
     RegisterView,
+    ScheduleGenerateView,
     SkillViewSet,
     TechnicianViewSet,
     UserViewSet,
@@ -35,5 +36,8 @@ urlpatterns = [
     path("geocode/lookup/", GeocodeLookupView.as_view(), name="geocode-lookup"),
     path("map/jobs/", MapJobsView.as_view(), name="map-jobs"),
     path("organization/", OrganizationView.as_view(), name="organization"),
+    path(
+        "schedule/generate/", ScheduleGenerateView.as_view(), name="schedule-generate"
+    ),
     path("", include(router.urls)),
 ]

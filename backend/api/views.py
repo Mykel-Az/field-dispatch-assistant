@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
+from .adapters import OrganizationNotConfigured
 from .exceptions import Conflict
 from .mixins import TenantScopedViewMixin
 from .models import (
@@ -42,6 +43,8 @@ from .serializers import (
     MapJobSerializer,
     OrganizationSerializer,
     RegisterSerializer,
+    ScheduleGenerateSerializer,
+    ScheduleResultSerializer,
     SetPasswordSerializer,
     SkillSerializer,
     StaffCreateSerializer,
@@ -50,7 +53,7 @@ from .serializers import (
     UserSerializer,
     UserUpdateSerializer,
 )
-from .services import accounts, locations
+from .services import accounts, locations, scheduling
 from .services import jobs as job_service
 from .services.accounts import (
     CannotChangeOwnPasswordHereError,
@@ -573,3 +576,31 @@ class MapJobsView(APIView):
                 "truncated": len(rows) > MAP_PIN_LIMIT,
             }
         )
+
+
+class ScheduleGenerateView(APIView):
+    """POST /schedule/generate/: plan the organization's unassigned jobs for one day.
+
+    Assigns what it can, stores a reason for every decision, and reports jobs that
+    could not be planned. Running it again only touches what is still unassigned.
+    """
+
+    permission_classes = [IsDispatcher]
+
+    @extend_schema(
+        request=ScheduleGenerateSerializer, responses=ScheduleResultSerializer
+    )
+    def post(self, request):
+        body = ScheduleGenerateSerializer(
+            data=request.data, context={"request": request}
+        )
+        body.is_valid(raise_exception=True)
+        try:
+            result = scheduling.generate_schedule(
+                organization=request.user.organization,
+                actor=request.user,
+                plan_date=body.validated_data.get("date"),
+            )
+        except OrganizationNotConfigured as error:
+            raise Conflict(str(error), code="organization_not_configured") from None
+        return Response(ScheduleResultSerializer(result).data)
