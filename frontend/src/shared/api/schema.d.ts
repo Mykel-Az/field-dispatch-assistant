@@ -317,6 +317,28 @@ export interface paths {
         patch: operations["organization_partial_update"];
         trace?: never;
     };
+    "/api/schedule/generate/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /schedule/generate/: plan the organization's unassigned jobs for one day.
+         *
+         *     Assigns what it can, stores a reason for every decision, and reports jobs that
+         *     could not be planned. Running it again only touches what is still unassigned.
+         */
+        post: operations["schedule_generate_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/": {
         parameters: {
             query?: never;
@@ -508,7 +530,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"];
+            readonly technician: components["schemas"]["JobTechnician"] | null;
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -517,6 +539,11 @@ export interface components {
             readonly slot_end: string | null;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
+        };
+        /** @description Who made a change. A system action has no actor (changed_by is null). */
+        JobActor: {
+            readonly id: number;
+            readonly full_name: string;
         };
         JobAssign: {
             technician_id: number;
@@ -553,7 +580,7 @@ export interface components {
             readonly is_urgent: boolean;
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
-            readonly technician: components["schemas"]["JobTechnician"];
+            readonly technician: components["schemas"]["JobTechnician"] | null;
             /** Format: date */
             readonly scheduled_date: string | null;
             /** Format: date-time */
@@ -580,9 +607,7 @@ export interface components {
             readonly from_status: string;
             readonly to_status: components["schemas"]["JobStatusEnum"];
             readonly reason: string;
-            readonly changed_by: {
-                [key: string]: unknown;
-            } | null;
+            readonly changed_by: components["schemas"]["JobActor"] | null;
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -739,6 +764,24 @@ export interface components {
         PatchedUserUpdate: {
             full_name?: string;
         };
+        /** @description One structured reason: a code and the numbers behind it. */
+        PlanReason: {
+            code: string;
+            facts: {
+                [key: string]: unknown;
+            };
+        };
+        PlannedJob: {
+            job_id: number;
+            technician_id: number;
+            /** Format: date-time */
+            estimated_arrival: string;
+            sla_label: string;
+            /** Format: double */
+            slack_minutes: number;
+            reasons: components["schemas"]["PlanReason"][];
+            sentence: string;
+        };
         Register: {
             organization_name: string;
             /** Format: email */
@@ -753,6 +796,18 @@ export interface components {
          * @enum {string}
          */
         RoleEnum: "head_dispatcher" | "dispatcher" | "technician";
+        /** @description POST /schedule/generate/. `date` defaults to today on the organization's clock. */
+        ScheduleGenerate: {
+            /** Format: date */
+            date?: string;
+        };
+        ScheduleResult: {
+            /** Format: date */
+            plan_date: string;
+            assigned: components["schemas"]["PlannedJob"][];
+            unassigned: components["schemas"]["UnplannedJob"][];
+            skipped: components["schemas"]["SkippedJob"][];
+        };
         /**
          * @description * `balanced` - Balanced
          *     * `nearest` - Nearest
@@ -770,6 +825,11 @@ export interface components {
         SkillBrief: {
             readonly id: number;
             readonly name: string;
+        };
+        SkippedJob: {
+            job_id: number;
+            code: string;
+            sentence: string;
         };
         /** @description Input for POST /users/. There is deliberately no `organization` field. */
         StaffCreate: {
@@ -808,6 +868,11 @@ export interface components {
          * @enum {string}
          */
         TimezoneEnum: "America/New_York" | "America/Chicago" | "America/Denver" | "America/Phoenix" | "America/Los_Angeles" | "America/Anchorage" | "Pacific/Honolulu";
+        UnplannedJob: {
+            job_id: number;
+            reasons: components["schemas"]["PlanReason"][];
+            sentence: string;
+        };
         User: {
             readonly id: number;
             /**
@@ -1309,6 +1374,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Organization"];
+                };
+            };
+        };
+    };
+    schedule_generate_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ScheduleGenerate"];
+                "application/x-www-form-urlencoded": components["schemas"]["ScheduleGenerate"];
+                "multipart/form-data": components["schemas"]["ScheduleGenerate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleResult"];
                 };
             };
         };
