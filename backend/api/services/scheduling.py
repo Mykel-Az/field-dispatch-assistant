@@ -23,7 +23,7 @@ from dispatch_engine.explanations import assignment_sentence, unassigned_sentenc
 from dispatch_engine.types import Explanation
 
 from ..adapters import job_to_view, org_to_config, technician_to_view
-from ..models import GeocodeStatus, Job, JobStatus, Technician
+from ..models import GeocodeStatus, Job, JobStatus, Organization, Technician
 from .jobs import local_date, transition
 
 USABLE_LOCATION = (GeocodeStatus.OK, GeocodeStatus.APPROXIMATE, GeocodeStatus.MANUAL)
@@ -88,7 +88,10 @@ def generate_schedule(
     distance = HaversineProvider(speed_mph=config.speed_mph)
 
     with transaction.atomic():
-        # Lock the candidate jobs first, in id order: two runs cannot both claim a job.
+        # One planner run per organization at a time: a second run waits here, then
+        # reads the loads the first one saved instead of planning from a stale picture.
+        Organization.objects.select_for_update().get(pk=organization.pk)
+        # Lock the candidate jobs too, in id order: no job can be claimed twice.
         candidates = list(
             Job.objects.for_organization(organization)
             .select_for_update()
