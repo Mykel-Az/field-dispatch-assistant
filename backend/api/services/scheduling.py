@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from dispatch_engine import lifecycle as lc
@@ -22,7 +22,7 @@ from dispatch_engine.distance import HaversineProvider
 from dispatch_engine.explanations import assignment_sentence, unassigned_sentence
 from dispatch_engine.types import Explanation
 
-from ..adapters import job_to_view, org_to_config, technician_to_view
+from ..adapters import at_local, job_to_view, org_to_config, technician_to_view
 from ..models import GeocodeStatus, Job, JobStatus, Organization, Technician
 from .jobs import local_date, transition
 
@@ -100,15 +100,7 @@ def generate_schedule(
             .order_by("id")
         )
         plannable = [j for j in candidates if _is_located(j)]
-        skipped = [
-            SkippedJob(
-                j.pk,
-                "needs_location",
-                f"“{j.title}” has no usable location yet, so it was not planned.",
-            )
-            for j in candidates
-            if not _is_located(j)
-        ]
+        skipped = [_skipped(j) for j in candidates if not _is_located(j)]
 
         technicians = list(
             Technician.objects.for_organization(organization)
@@ -124,7 +116,10 @@ def generate_schedule(
         ):
             workload[job.technician_id].append(job)
 
-        job_views = {j.pk: job_to_view(j) for j in plannable}
+        day_opens = at_local(plan_date, organization.work_start, organization.timezone)
+        job_views = {
+            j.pk: job_to_view(j, urgent_clock_start=day_opens) for j in plannable
+        }
         tech_views = {
             t.pk: technician_to_view(
                 t,
@@ -155,7 +150,12 @@ def generate_schedule(
             )
             saved.estimated_arrival = a.estimated_arrival
             saved.sequence_position = next_position[a.technician_id]
-            saved.plan_explanation = {"reasons": reasons, "sentence": sentence}
+            saved.plan_explanation = {
+                "reasons": reasons,
+                "sentence": sentence,
+                "sla_label": str(a.sla_label),
+                "slack_minutes": a.slack_minutes,
+            }
             saved.save(
                 update_fields=[
                     "estimated_arrival",
@@ -187,6 +187,73 @@ def generate_schedule(
             )
             unassigned.append(UnplannedJob(u.job_id, reasons, sentence))
 
+    return ScheduleResult(plan_date, assigned, unassigned, skipped)
+
+
+def _skipped(job: Job) -> SkippedJob:
+    return SkippedJob(
+        job.pk,
+        "needs_location",
+        f"“{job.title}” has no usable location yet, so it was not planned.",
+    )
+
+
+def current_schedule(
+    *, organization, plan_date: date | None = None, clock: Clock | None = None
+) -> ScheduleResult:
+    """What the planner last decided for `plan_date`, read back from the database.
+
+    Same shape as `generate_schedule`, built from the stored explanations, so the
+    plan page can show the day after a reload and after other people's runs. It
+    changes nothing. It lists:
+      - assigned: Assigned and Ongoing jobs the planner placed (those it gave an
+        arrival time and an explanation; a job assigned by hand has neither yet);
+      - unassigned: jobs the planner looked at and could not place, with the reasons;
+      - skipped: jobs with no usable location (worked out live, as in a run).
+    Unassigned jobs the planner has not seen yet are not listed: they wait for a run.
+    """
+    plan_date = plan_date or local_date(
+        (clock or SystemClock()).now(), organization.timezone
+    )
+    jobs = (
+        Job.objects.for_organization(organization)
+        .filter(scheduled_date=plan_date)
+        .filter(
+            Q(
+                status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING],
+                technician__isnull=False,
+            )
+            | Q(status=JobStatus.UNASSIGNED)
+        )
+        .order_by("technician_id", "sequence_position", "id")
+    )
+    assigned: list[PlannedJob] = []
+    unassigned: list[UnplannedJob] = []
+    skipped: list[SkippedJob] = []
+    for job in jobs:
+        stored = job.plan_explanation or {}
+        if job.status == JobStatus.UNASSIGNED:
+            if not _is_located(job):
+                skipped.append(_skipped(job))
+            elif stored:
+                unassigned.append(
+                    UnplannedJob(
+                        job.pk, stored.get("reasons", []), stored.get("sentence", "")
+                    )
+                )
+        elif stored and job.estimated_arrival is not None:
+            assigned.append(
+                PlannedJob(
+                    job.pk,
+                    job.technician_id,
+                    job.estimated_arrival,
+                    # Explanations saved before the SLA was stored with them have no label.
+                    stored.get("sla_label", "unknown"),
+                    stored.get("slack_minutes", 0.0),
+                    stored.get("reasons", []),
+                    stored.get("sentence", ""),
+                )
+            )
     return ScheduleResult(plan_date, assigned, unassigned, skipped)
 
 

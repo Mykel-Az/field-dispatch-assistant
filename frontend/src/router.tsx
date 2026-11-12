@@ -9,6 +9,7 @@ import JobPage from './dispatcher/pages/JobPage';
 import JobsPage from './dispatcher/pages/JobsPage';
 import MapPage from './dispatcher/pages/MapPage';
 import OrganizationPage from './dispatcher/pages/OrganizationPage';
+import PlanPage from './dispatcher/pages/PlanPage';
 import TechniciansPage from './dispatcher/pages/TechniciansPage';
 import UsersPage from './dispatcher/pages/UsersPage';
 import AppLayout from './layout/AppLayout';
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
             { path: '/dashboard', element: <DashboardPage /> },
             { path: '/jobs', element: <JobsPage /> },
             { path: '/map', element: <MapPage /> },
+            { path: '/plan', element: <PlanPage /> },
             { path: '/jobs/new', element: <JobNewPage /> },
             { path: '/jobs/:id', element: <JobPage /> },
             { path: '/organization', element: <OrganizationPage /> },

@@ -575,6 +575,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: ''
+  /api/schedule/:
+    get:
+      operationId: schedule_retrieve
+      description: |-
+        GET /schedule/?date=: what the planner last decided for a day.
+
+        The same shape `POST /schedule/generate/` returns, read back from the stored
+        explanations. It changes nothing, so a reload (or another dispatcher) sees
+        the plan without running it again.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+      tags:
+      - schedule
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleResult'
+          description: ''
   /api/schedule/generate/:
     post:
       operationId: schedule_generate_create

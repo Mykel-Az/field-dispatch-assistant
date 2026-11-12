@@ -57,7 +57,16 @@ def org_to_config(organization: Organization) -> OrgConfig:
     )
 
 
-def job_to_view(job: Job) -> JobView:
+def job_to_view(job: Job, *, urgent_clock_start: datetime | None = None) -> JobView:
+    """A job as the engine sees it.
+
+    An urgent job's deadline is its creation time plus the urgent buffer. When the
+    day being planned opens after that (an emergency logged tonight for tomorrow's
+    first call), the buffer would already be spent before anyone could start, and
+    every plan would read "1,500 minutes late". `urgent_clock_start` (the day's
+    opening) moves the start of that clock forward so the buffer counts from the
+    first moment someone can actually work.
+    """
     if job.lat is None or job.lng is None:
         raise JobNotLocated(f"job {job.pk} has no coordinates")
     return JobView(
@@ -65,7 +74,11 @@ def job_to_view(job: Job) -> JobView:
         label=job.title,
         location=_location(job),
         is_urgent=job.is_urgent,
-        created_at=job.created_at,
+        created_at=(
+            max(job.created_at, urgent_clock_start)
+            if job.is_urgent and urgent_clock_start
+            else job.created_at
+        ),
         slot_start=job.slot_start,
         slot_end=job.slot_end,
         duration_minutes=job.estimated_duration_minutes,

@@ -317,6 +317,29 @@ export interface paths {
         patch: operations["organization_partial_update"];
         trace?: never;
     };
+    "/api/schedule/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /schedule/?date=: what the planner last decided for a day.
+         *
+         *     The same shape `POST /schedule/generate/` returns, read back from the stored
+         *     explanations. It changes nothing, so a reload (or another dispatcher) sees
+         *     the plan without running it again.
+         */
+        get: operations["schedule_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/schedule/generate/": {
         parameters: {
             query?: never;
@@ -1374,6 +1397,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Organization"];
+                };
+            };
+        };
+    };
+    schedule_retrieve: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleResult"];
                 };
             };
         };

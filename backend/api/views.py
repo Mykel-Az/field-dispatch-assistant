@@ -3,7 +3,8 @@ from django.db import transaction
 from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
@@ -44,6 +45,7 @@ from .serializers import (
     OrganizationSerializer,
     RegisterSerializer,
     ScheduleGenerateSerializer,
+    ScheduleQuerySerializer,
     ScheduleResultSerializer,
     SetPasswordSerializer,
     SkillSerializer,
@@ -603,4 +605,28 @@ class ScheduleGenerateView(APIView):
             )
         except OrganizationNotConfigured as error:
             raise Conflict(str(error), code="organization_not_configured") from None
+        return Response(ScheduleResultSerializer(result).data)
+
+
+class ScheduleView(APIView):
+    """GET /schedule/?date=: what the planner last decided for a day.
+
+    The same shape `POST /schedule/generate/` returns, read back from the stored
+    explanations. It changes nothing, so a reload (or another dispatcher) sees
+    the plan without running it again.
+    """
+
+    permission_classes = [IsDispatcher]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("date", OpenApiTypes.DATE, required=False)],
+        responses=ScheduleResultSerializer,
+    )
+    def get(self, request):
+        query = ScheduleQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        result = scheduling.current_schedule(
+            organization=request.user.organization,
+            plan_date=query.validated_data.get("date"),
+        )
         return Response(ScheduleResultSerializer(result).data)
