@@ -10,6 +10,7 @@ import type {
   Organization,
   Page,
   RegisterInput,
+  ScheduleResult,
   User,
   Technician,
   TechnicianUpdate,
@@ -56,6 +57,15 @@ export const updateOrganization = (
 export const fetchTechnicians = () => get<Technician[]>('/technicians/');
 export const updateTechnician = (id: number, input: TechnicianUpdate) =>
   patch<Technician>(`/technicians/${id}/`, input);
+
+// --- planning (dispatcher and head dispatcher) ---
+/** What the planner last decided for a day, read back (default: today). */
+export const fetchSchedule = (date?: string) =>
+  get<ScheduleResult>(`/schedule/${date ? `?date=${encodeURIComponent(date)}` : ''}`);
+
+/** Plan the unassigned jobs of one day (default: today on the organization's clock). */
+export const generateSchedule = (date?: string) =>
+  post<ScheduleResult>('/schedule/generate/', date ? { date } : {});
 
 // --- jobs (dispatcher and head dispatcher) ---
 export const fetchJobs = (filters: JobFilterValues = NO_FILTERS, page = 1) => {

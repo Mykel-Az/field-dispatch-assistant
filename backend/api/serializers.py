@@ -529,6 +529,12 @@ class ScheduleGenerateSerializer(serializers.Serializer):
         return value
 
 
+class ScheduleQuerySerializer(serializers.Serializer):
+    """GET /schedule/. Any day may be looked at, past ones included."""
+
+    date = serializers.DateField(required=False)
+
+
 class PlanReasonSerializer(serializers.Serializer):
     """One structured reason: a code and the numbers behind it."""
 

@@ -266,3 +266,117 @@ def test_the_default_day_is_today_on_the_organizations_clock(org, dispatcher_a, 
     )
     assert result.plan_date == DAY
     assert fresh(j).status in (JobStatus.UNASSIGNED, JobStatus.ASSIGNED)
+
+
+def test_an_urgent_job_planned_for_a_later_day_is_not_flagged_hopelessly_late(
+    org, dispatcher_a, tech
+):
+    """Logged "now" for tomorrow: the urgent buffer counts from when tomorrow opens."""
+    tomorrow = DAY + datetime.timedelta(days=1)
+    j = job(
+        org, is_urgent=True, slot_start=None, slot_end=None, scheduled_date=tomorrow
+    )
+    Job.objects.filter(pk=j.pk).update(created_at=NOW)  # created a day earlier
+    result = scheduling.generate_schedule(
+        organization=org, actor=dispatcher_a, plan_date=tomorrow, clock=CLOCK
+    )
+    (planned,) = result.assigned
+    assert planned.sla_label == "ok"
+
+
+# ---- reading the plan back (current_schedule) -------------------------------
+def read(org, **kwargs):
+    return scheduling.current_schedule(organization=org, plan_date=DAY, **kwargs)
+
+
+def test_the_stored_plan_reads_back_exactly_as_the_run_returned_it(
+    org, dispatcher_a, tech
+):
+    placed = job(org)
+    nobody = job(org, skills=[Skill.objects.exclude(name="HVAC").first()])
+    nowhere = job(org, geocode_status="failed", lat=None, lng=None)
+    ran = run(org, dispatcher_a)
+    again = read(org)
+    assert again == ran
+    assert [p.job_id for p in again.assigned] == [placed.pk]
+    assert [u.job_id for u in again.unassigned] == [nobody.pk]
+    assert [s.job_id for s in again.skipped] == [nowhere.pk]
+
+
+def test_reading_changes_nothing(org, dispatcher_a, tech):
+    j = job(org)
+    run(org, dispatcher_a)
+    before = (fresh(j).version, fresh(j).updated_at, JobStatusHistory.objects.count())
+    read(org)
+    assert (
+        fresh(j).version,
+        fresh(j).updated_at,
+        JobStatusHistory.objects.count(),
+    ) == before
+
+
+def test_jobs_the_planner_has_not_seen_yet_are_not_listed(org, tech):
+    job(org)  # located and unassigned, but no run yet
+    waiting_without_location = job(org, geocode_status="failed", lat=None, lng=None)
+    result = read(org)
+    assert result.assigned == [] and result.unassigned == []
+    assert [s.job_id for s in result.skipped] == [waiting_without_location.pk]
+
+
+def test_a_job_assigned_by_hand_is_not_part_of_the_plan(org, dispatcher_a, tech):
+    j = job(org)
+    job_service.transition(fresh(j), "assigned", dispatcher_a, technician=tech)
+    assert read(org).assigned == []
+
+
+def test_an_ongoing_job_stays_in_the_plan(org, dispatcher_a, tech):
+    j = job(org)
+    run(org, dispatcher_a)
+    job_service.transition(fresh(j), "ongoing", dispatcher_a)
+    assert [p.job_id for p in read(org).assigned] == [j.pk]
+
+
+def test_stops_come_back_in_each_technicians_order(org, dispatcher_a, tech):
+    late = job(org, slot_start=at(19), slot_end=at(21))
+    early = job(org, slot_start=at(15), slot_end=at(17))
+    run(org, dispatcher_a)
+    assert [p.job_id for p in read(org).assigned] == [early.pk, late.pk]
+
+
+def test_only_this_organization_and_this_day_are_read(org, org_b, dispatcher_a, tech):
+    other_day = job(org, scheduled_date=DAY + datetime.timedelta(days=1))
+    theirs = job(org_b)
+    run(org, dispatcher_a)
+    Job.objects.filter(pk__in=[other_day.pk, theirs.pk]).update(
+        plan_explanation={"reasons": [], "sentence": "x"}
+    )
+    ids = [u.job_id for u in read(org).unassigned] + [
+        p.job_id for p in read(org).assigned
+    ]
+    assert other_day.pk not in ids and theirs.pk not in ids
+
+
+def test_an_explanation_saved_before_the_sla_was_stored_still_reads(
+    org, dispatcher_a, tech
+):
+    j = job(org)
+    run(org, dispatcher_a)
+    stored = fresh(j).plan_explanation
+    stored.pop("sla_label")
+    stored.pop("slack_minutes")
+    Job.objects.filter(pk=j.pk).update(plan_explanation=stored)
+    (planned,) = read(org).assigned
+    assert planned.sla_label == "unknown"
+
+
+def test_the_default_day_for_reading_is_today_on_the_organizations_clock(
+    org, dispatcher_a, tech
+):
+    job(org)
+    run(org, dispatcher_a)
+    late_utc = FixedClock(
+        datetime.datetime(2026, 11, 3, 3, 0, tzinfo=UTC)
+    )  # still Nov 2 in Chicago
+    assert (
+        len(scheduling.current_schedule(organization=org, clock=late_utc).assigned) == 1
+    )

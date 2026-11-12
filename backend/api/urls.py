@@ -12,6 +12,7 @@ from .views import (
     OrganizationView,
     RegisterView,
     ScheduleGenerateView,
+    ScheduleView,
     SkillViewSet,
     TechnicianViewSet,
     UserViewSet,
@@ -36,6 +37,7 @@ urlpatterns = [
     path("geocode/lookup/", GeocodeLookupView.as_view(), name="geocode-lookup"),
     path("map/jobs/", MapJobsView.as_view(), name="map-jobs"),
     path("organization/", OrganizationView.as_view(), name="organization"),
+    path("schedule/", ScheduleView.as_view(), name="schedule"),
     path(
         "schedule/generate/", ScheduleGenerateView.as_view(), name="schedule-generate"
     ),

@@ -224,3 +224,28 @@ def test_a_job_that_ended_in_the_past_does_not_hold_the_technician(org, skill):
     view = view_of(technician, org, [job])
     assert view.free_at == NOW  # it still counts toward the daily load
     assert view.assigned_count == 1
+
+
+def test_an_urgent_jobs_clock_starts_when_the_planned_day_opens(org, skill):
+    job = make_job(org, skill)  # urgent, created "now"
+    opens = job.created_at + datetime.timedelta(days=1)
+    assert job_to_view(job, urgent_clock_start=opens).created_at == opens
+
+
+def test_an_urgent_job_made_after_opening_keeps_its_own_clock(org, skill):
+    job = make_job(org, skill)
+    opens = job.created_at - datetime.timedelta(hours=3)
+    assert job_to_view(job, urgent_clock_start=opens).created_at == job.created_at
+
+
+def test_a_normal_jobs_created_at_is_never_moved(org, skill):
+    start = NOW + datetime.timedelta(hours=2)
+    job = make_job(
+        org,
+        skill,
+        is_urgent=False,
+        slot_start=start,
+        slot_end=start + datetime.timedelta(hours=2),
+    )
+    later = job.created_at + datetime.timedelta(days=1)
+    assert job_to_view(job, urgent_clock_start=later).created_at == job.created_at

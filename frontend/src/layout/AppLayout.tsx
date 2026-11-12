@@ -29,6 +29,7 @@ export default function AppLayout() {
         <nav className="order-last flex w-full flex-nowrap gap-1.5 overflow-x-auto sm:order-none sm:w-auto sm:flex-1 sm:flex-wrap sm:overflow-visible">
           {staff && <NavLink to="/dashboard" className={link}>Dashboard</NavLink>}
           {staff && <NavLink to="/jobs" className={link}>Jobs</NavLink>}
+          {staff && <NavLink to="/plan" className={link}>Plan</NavLink>}
           {staff && <NavLink to="/map" className={link}>Map</NavLink>}
           {!staff && <NavLink to="/tech" className={link}>My jobs</NavLink>}
           {staff && <NavLink to="/technicians" className={link}>Technicians</NavLink>}
