@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models';
+import JobTags from '../../shared/components/JobTags';
 import { FROM_PLAN } from '../../shared/useBack';
 import { ui } from '../../shared/ui';
 import {
@@ -91,6 +92,7 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
                     >
                       {titleOf(jobs, stop.job_id)}
                     </Link>
+                <JobTags className="ml-2" job={jobs.get(stop.job_id)} />
                     {hasSla(stop.sla_label) && (
                       <span
                         className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-sm font-bold ${sla.classes}`}
@@ -118,6 +120,7 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
                 <Link className="font-semibold text-warn-ink underline" to={`/jobs/${job.job_id}`} state={FROM_PLAN}>
                   {titleOf(jobs, job.job_id)}
                 </Link>
+                <JobTags className="ml-2" job={jobs.get(job.job_id)} />
                 <p className="mt-1 text-sm text-warn-ink">{job.sentence}</p>
                 <Why lines={rejectionLines(job.reasons, technicians)} />
                 <Link
@@ -141,6 +144,7 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
                 <Link className="font-semibold text-brand-ink underline" to={`/jobs/${job.job_id}`} state={FROM_PLAN}>
                   {titleOf(jobs, job.job_id)}
                 </Link>
+                <JobTags className="ml-2" job={jobs.get(job.job_id)} />
                 <p className="mt-1 text-sm text-ink-muted">{job.sentence}</p>
                 <Link
                   className={`${ui.btnSmall} mt-3 inline-flex items-center`}

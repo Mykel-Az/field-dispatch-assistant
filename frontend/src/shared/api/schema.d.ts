@@ -641,6 +641,7 @@ export interface components {
             readonly to_status: components["schemas"]["JobStatusEnum"];
             readonly reason: string;
             readonly changed_by: components["schemas"]["JobActor"] | null;
+            readonly source: components["schemas"]["SourceEnum"];
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -877,6 +878,12 @@ export interface components {
             code: string;
             sentence: string;
         };
+        /**
+         * @description * `manual` - A person
+         *     * `planner` - The planner
+         * @enum {string}
+         */
+        SourceEnum: "manual" | "planner";
         /** @description Input for POST /users/. There is deliberately no `organization` field. */
         StaffCreate: {
             /** Format: email */

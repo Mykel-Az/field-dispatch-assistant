@@ -6,7 +6,8 @@ import JobFilterBar from '../../shared/components/JobFilterBar';
 import StatusBadge from '../../shared/components/StatusBadge';
 import StatusPin from '../../shared/components/StatusPin';
 import { NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
-import { formatSlot, placeLine } from '../../shared/jobTime';
+import JobTags from '../../shared/components/JobTags';
+import { formatWhen, placeLine } from '../../shared/jobTime';
 import JobsMap from '../../shared/map/JobsMap';
 import { useOffice } from '../../shared/map/useOffice';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
@@ -147,11 +148,12 @@ export default function MapPage() {
                   {shown.is_urgent && (
                     <span className="rounded-full bg-danger-soft px-3 py-0.5 text-sm font-bold text-danger">Urgent</span>
                   )}
+                  <JobTags job={shown} />
                   {isJobStatus(shown.status) && <StatusBadge status={shown.status} />}
                 </div>
                 <p className="mt-1">{shown.customer_name} · {shown.address}</p>
                 <p className={ui.muted}>
-                  {placeLine(shown)} · {formatSlot(shown.slot_start, shown.slot_end)} ·{' '}
+                  {placeLine(shown)} · {formatWhen(shown)} ·{' '}
                   {shown.technician?.full_name ?? 'Not assigned'}
                 </p>
               </div>

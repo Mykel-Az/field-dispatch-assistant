@@ -58,7 +58,7 @@ def default_skills_for(category):
     )
 
 
-def _record(job, *, from_status, actor, reason, technician_id):
+def _record(job, *, from_status, actor, reason, technician_id, source="manual"):
     JobStatusHistory.objects.create(
         organization_id=job.organization_id,
         job=job,
@@ -67,6 +67,7 @@ def _record(job, *, from_status, actor, reason, technician_id):
         technician_id=technician_id,
         changed_by=actor,
         reason=reason,
+        source=source,
     )
 
 
@@ -78,7 +79,7 @@ def local_date(moment, tz_name):
 
 
 class OpeningHoursMissing(ValueError):
-    """A job for "any time that day" needs opening hours to mean anything."""
+    """A job for any time that day needs opening hours to mean anything."""
 
 
 def opening_window(organization, day):
@@ -206,14 +207,17 @@ def update_job(*, job, client_version, skills=None, **changes):
     return locked
 
 
-def transition(job, to, actor, reason="", *, technician=None, client_version=None):
+def transition(
+    job, to, actor, reason="", *, technician=None, client_version=None, source="manual"
+):
     """The only place a job's status changes.
 
     Checks the lifecycle table, updates the job and writes exactly one history
     row, all in one transaction. Returns the fresh, locked job. `technician` is
     required when moving to Assigned (the database insists on it). When
     `client_version` is given (a person acting on a screen), it must still be the
-    job's current version, otherwise 409 stale_version.
+    job's current version, otherwise 409 stale_version. `source` is "planner" when
+    the planner made the change on behalf of `actor`, who ran it.
     """
     with transaction.atomic():
         locked = Job.objects.select_for_update().get(pk=job.pk)
@@ -256,7 +260,12 @@ def transition(job, to, actor, reason="", *, technician=None, client_version=Non
         locked.version += 1
         locked.save()
         _record(
-            locked, from_status=src, actor=actor, reason=reason, technician_id=involved
+            locked,
+            from_status=src,
+            actor=actor,
+            reason=reason,
+            technician_id=involved,
+            source=source,
         )
     return locked
 

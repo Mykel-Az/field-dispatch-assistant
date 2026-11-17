@@ -366,6 +366,14 @@ class Job(AddressMixin, TenantScopedModel):
         return f"{self.title} ({self.status})"
 
 
+class HistorySource(models.TextChoices):
+    """Who made a status change: a person on a screen, or the planner acting for
+    the person who ran it. `changed_by` stays that person either way."""
+
+    MANUAL = "manual", "A person"
+    PLANNER = "planner", "The planner"
+
+
 class JobStatusHistory(TenantScopedModel):
     """Append-only (invariant 15): one row per status change, never edited."""
 
@@ -379,6 +387,9 @@ class JobStatusHistory(TenantScopedModel):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, blank=True, null=True
     )
     reason = models.TextField(blank=True)
+    source = models.CharField(
+        max_length=10, choices=HistorySource.choices, default=HistorySource.MANUAL
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = AppendOnlyQuerySet.as_manager()

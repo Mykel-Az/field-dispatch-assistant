@@ -52,6 +52,7 @@ def test_create_uses_category_default_skills_and_writes_history(dispatcher_a):
     [row] = data["history"]
     assert (row["from_status"], row["to_status"]) == ("", "unassigned")
     assert row["changed_by"]["id"] == dispatcher_a.pk
+    assert row["source"] == "manual"
 
 
 def test_create_goes_into_the_requesters_organization(dispatcher_a, org_a, org_b):

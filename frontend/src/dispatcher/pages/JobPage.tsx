@@ -4,7 +4,9 @@ import { cancelJob, fetchJob } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import { CATEGORY_LABEL, type JobDetail } from '../../shared/api/models';
 import StatusBadge from '../../shared/components/StatusBadge';
-import { formatSlot, formatStamp, placeLine } from '../../shared/jobTime';
+import JobTags from '../../shared/components/JobTags';
+import { historyActor } from '../../shared/historyActor';
+import { formatStamp, formatWhen, placeLine } from '../../shared/jobTime';
 import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import { notifyJobsChanged } from '../../shared/usePolling';
@@ -39,7 +41,7 @@ function History({ job }: { job: JobDetail }) {
               <div className="font-semibold">{from ? `${from} → ${to}` : `Created as ${to}`}</div>
               {h.reason && <div className="text-sm">“{h.reason}”</div>}
               <div className="text-sm text-ink-muted">
-                {h.changed_by?.full_name ?? 'System'} · {formatStamp(h.created_at)}
+                {historyActor(h)} · {formatStamp(h.created_at)}
               </div>
             </li>
           );
@@ -148,6 +150,7 @@ export default function JobPage() {
         {job.is_urgent && (
           <span className="rounded-full bg-danger-soft px-3 py-0.5 text-sm font-bold text-danger">Urgent</span>
         )}
+        <JobTags job={job} />
         <StatusBadge status={job.status} />
       </div>
 
@@ -192,7 +195,7 @@ export default function JobPage() {
                     )}
                   </Fact>
                   <Fact label="Time window">
-                    {formatSlot(job.slot_start, job.slot_end)}
+                    {formatWhen(job)}
                     <div className="text-sm text-ink-muted">About {job.estimated_duration_minutes} min</div>
                   </Fact>
                   <Fact label="Technician">{job.technician?.full_name ?? 'Not assigned'}</Fact>

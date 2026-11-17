@@ -147,6 +147,7 @@ def generate_schedule(
                 lc.ASSIGNED,
                 actor,
                 technician=techs[a.technician_id],
+                source="planner",
             )
             saved.estimated_arrival = a.estimated_arrival
             saved.sequence_position = next_position[a.technician_id]
