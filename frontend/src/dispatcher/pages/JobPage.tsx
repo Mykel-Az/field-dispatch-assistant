@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { cancelJob, fetchJob } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import { CATEGORY_LABEL, type JobDetail } from '../../shared/api/models';
@@ -8,6 +8,7 @@ import { formatSlot, formatStamp, placeLine } from '../../shared/jobTime';
 import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import { notifyJobsChanged } from '../../shared/usePolling';
+import BackLink from '../../shared/components/BackLink';
 import { ui } from '../../shared/ui';
 import AssignPanel from '../components/AssignPanel';
 import JobForm from '../components/JobForm';
@@ -130,7 +131,7 @@ export default function JobPage() {
     return (
       <section>
         <p role="alert" className={ui.error}>{error}</p>
-        <Link to="/jobs" className="text-brand hover:underline">Back to jobs</Link>
+        <BackLink className="text-brand hover:underline" />
       </section>
     );
   }
@@ -141,7 +142,7 @@ export default function JobPage() {
 
   return (
     <section>
-      <Link to="/jobs" className="text-sm text-brand hover:underline">← All jobs</Link>
+      <BackLink />
       <div className="mt-2 mb-5 flex flex-wrap items-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight">{job.title}</h1>
         {job.is_urgent && (
@@ -179,6 +180,11 @@ export default function JobPage() {
                   <Fact label="Address">
                     {job.address}
                     <div className="text-sm text-ink-muted">{placeLine(job)}</div>
+                    {job.geocode_status === 'manual' && (
+                      <div className="mt-1 text-sm text-ink-muted">
+                        Location set by map pin. Approximate, may not be the exact address.
+                      </div>
+                    )}
                     {needsLocation && (
                       <div className="mt-1 text-sm text-warn-ink">
                         Location needs attention: we could not place this address on the map.

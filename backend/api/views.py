@@ -272,11 +272,16 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             serializer.instance = org
             if data.get("lat") is not None and data.get("lng") is not None:
                 data["geocode_status"] = GeocodeStatus.MANUAL
-            zone_changed = "timezone" in data and data["timezone"] != org.timezone
+            # Jobs follow the clock: a new zone moves their days, new opening
+            # hours move the window of "any time that day" jobs.
+            clock_changed = any(
+                f in data and data[f] != getattr(org, f)
+                for f in ("timezone", "work_start", "work_end")
+            )
             for field, value in data.items():
                 setattr(org, field, value)
             org.save()
-            if zone_changed:
+            if clock_changed:
                 job_service.rederive_dates(org)
 
 

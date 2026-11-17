@@ -1,7 +1,8 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import OfficeMarker from './OfficeMarker';
 
 export interface LatLng {
   lat: number;
@@ -26,11 +27,29 @@ function Clicks({ onPick }: { onPick: (p: LatLng) => void }) {
   return null;
 }
 
-function Follow({ target, zoom }: { target: LatLng; zoom: number }) {
+/**
+ * First view: the pin and the office together when both are known, so the
+ * dispatcher sees where the job is relative to the base. After that the map is
+ * the person's: it only pans when the pin ends up out of sight (a retried
+ * address, say), never while they are placing it.
+ */
+function Frame({ pin, office }: { pin: LatLng | null; office: LatLng | null }) {
   const map = useMap();
+  const framed = useRef(false);
   useEffect(() => {
-    map.setView([target.lat, target.lng], Math.max(map.getZoom(), zoom));
-  }, [map, target.lat, target.lng, zoom]);
+    if (!pin) return;
+    const here: L.LatLngExpression = [pin.lat, pin.lng];
+    if (!framed.current) {
+      framed.current = true;
+      if (office) {
+        map.fitBounds(L.latLngBounds([here, [office.lat, office.lng]]), { padding: [48, 48], maxZoom: 16 });
+      } else {
+        map.setView(here, Math.max(map.getZoom(), 15));
+      }
+    } else if (!map.getBounds().contains(here)) {
+      map.panTo(here);
+    }
+  }, [map, pin, office]);
   return null;
 }
 
@@ -41,12 +60,16 @@ interface Props {
   onPick?: (p: LatLng) => void;
   /** Where to look when there is no pin yet (e.g. the office). */
   fallbackCenter?: LatLng | null;
-  height?: number;
+  /** The office, drawn as its own marker. */
+  office?: LatLng | null;
+  /** Mouse-wheel zoom: off in a page that scrolls, on in the full-screen editor. */
+  wheelZoom?: boolean;
+  height?: number | string;
 }
 
 /** A map with one pin, which the dispatcher can click or drag to correct. */
-export default function PinMap({ pin, onPick, fallbackCenter, height = 260 }: Props) {
-  const start = pin ?? fallbackCenter ?? US_CENTER;
+export default function PinMap({ pin, onPick, fallbackCenter, office = null, wheelZoom = false, height = 260 }: Props) {
+  const start = pin ?? office ?? fallbackCenter ?? US_CENTER;
   return (
     <div
       className="overflow-hidden rounded-xl border border-line"
@@ -56,8 +79,8 @@ export default function PinMap({ pin, onPick, fallbackCenter, height = 260 }: Pr
     >
       <MapContainer
         center={[start.lat, start.lng]}
-        zoom={pin ? 16 : fallbackCenter ? 11 : 4}
-        scrollWheelZoom={false}
+        zoom={pin ? 16 : office || fallbackCenter ? 11 : 4}
+        scrollWheelZoom={wheelZoom}
         style={{ height: '100%', width: '100%' }}
       >
         <TileLayer
@@ -65,9 +88,10 @@ export default function PinMap({ pin, onPick, fallbackCenter, height = 260 }: Pr
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         {onPick && <Clicks onPick={onPick} />}
+        {office && <OfficeMarker at={office} />}
+        <Frame pin={pin} office={office} />
         {pin && (
           <>
-            <Follow target={pin} zoom={15} />
             <Marker
               position={[pin.lat, pin.lng]}
               icon={pinIcon}

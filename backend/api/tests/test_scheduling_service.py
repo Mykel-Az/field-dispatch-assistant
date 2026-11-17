@@ -380,3 +380,37 @@ def test_the_default_day_for_reading_is_today_on_the_organizations_clock(
     assert (
         len(scheduling.current_schedule(organization=org, clock=late_utc).assigned) == 1
     )
+
+
+# ---- priority and any-time jobs (ADR-020, ADR-021) ---------------------------
+def test_a_high_priority_job_gets_the_last_place_before_an_earlier_normal_one(
+    org, dispatcher_a, tech
+):
+    org.max_jobs_per_tech_per_day = 1
+    org.save()
+    normal = job(org, title="Normal, entered first")
+    high = job(org, title="High, entered second", priority="high")
+    result = run(org, dispatcher_a)
+    assert fresh(high).status == JobStatus.ASSIGNED
+    assert fresh(normal).status == JobStatus.UNASSIGNED
+    assert "daily limit of 1" in result.unassigned[0].sentence
+
+
+def test_a_low_priority_job_waits_behind_a_normal_one(org, dispatcher_a, tech):
+    org.max_jobs_per_tech_per_day = 1
+    org.save()
+    low = job(org, priority="low")
+    normal = job(org)
+    run(org, dispatcher_a)
+    assert fresh(normal).status == JobStatus.ASSIGNED
+    assert fresh(low).status == JobStatus.UNASSIGNED
+
+
+def test_an_any_time_job_is_planned_inside_the_opening_hours(org, dispatcher_a, tech):
+    j = job(
+        org, slot_is_fixed=False, slot_start=at(14), slot_end=at(23)
+    )  # 08:00-17:00 CST
+    result = run(org, dispatcher_a)
+    assert [p.job_id for p in result.assigned] == [j.pk]
+    arrival = fresh(j).estimated_arrival
+    assert NOW <= arrival <= at(23)  # not before "now" (9:00 local), not after closing

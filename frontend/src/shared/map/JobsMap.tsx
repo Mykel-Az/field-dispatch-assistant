@@ -6,6 +6,8 @@ import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
 import type { MapPin } from '../api/client';
 import StatusPin from '../components/StatusPin';
 import { isJobStatus } from '../status';
+import OfficeMarker from './OfficeMarker';
+import type { LatLng } from './PinMap';
 
 const US_CENTER: [number, number] = [39.8, -98.6];
 
@@ -27,14 +29,15 @@ function iconFor(status: string, selected: boolean) {
 }
 
 /** Fit the view to the pins, but only when the set of pins changes, not on every poll. */
-function FitToPins({ pins }: { pins: MapPin[] }) {
+function FitToPins({ pins, office }: { pins: MapPin[]; office: LatLng | null }) {
   const map = useMap();
-  const key = pins.map((p) => p.id).join(',');
+  const key = `${pins.map((p) => p.id).join(',')}|${office ? `${office.lat},${office.lng}` : ''}`;
   useEffect(() => {
-    if (pins.length === 0) return;
-    const bounds = L.latLngBounds(pins.map((p) => [p.lat, p.lng] as [number, number]));
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refit only when the ids change
+    const points = pins.map((p) => [p.lat, p.lng] as [number, number]);
+    if (office) points.push([office.lat, office.lng]); // the base is always in view
+    if (points.length === 0) return;
+    map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 15 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refit only when the ids or office change
   }, [map, key]);
   return null;
 }
@@ -43,10 +46,12 @@ interface Props {
   pins: MapPin[];
   selectedId: number | null;
   onSelect: (id: number) => void;
+  /** The office, drawn on the map and included when fitting the view. */
+  office?: LatLng | null;
   height?: number | string;
 }
 
-export default function JobsMap({ pins, selectedId, onSelect, height = 520 }: Props) {
+export default function JobsMap({ pins, selectedId, onSelect, office = null, height = 520 }: Props) {
   const ordered = useMemo(
     // the selected pin is drawn last, so it sits on top
     () => [...pins].sort((a, b) => Number(a.id === selectedId) - Number(b.id === selectedId)),
@@ -59,7 +64,8 @@ export default function JobsMap({ pins, selectedId, onSelect, height = 520 }: Pr
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <FitToPins pins={pins} />
+        <FitToPins pins={pins} office={office} />
+        {office && <OfficeMarker at={office} />}
         {ordered.map((p) => (
           <Marker
             key={p.id}

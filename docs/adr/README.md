@@ -23,3 +23,6 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [016](016-multi-tenancy-explicit-scoping.md) | Multi-tenancy with explicit scoping |
 | [017](017-roles-immutability-global-email.md) | Roles, immutability, global email |
 | [018](018-splash-instead-of-keep-alive.md) | Cold-start splash instead of a keep-alive job |
+| [020](020-job-priority.md) | Job priority orders the work |
+| [021](021-any-time-jobs.md) | "Any time that day" jobs are a movable window |
+| [022](022-daily-limit-is-a-hard-cap.md) | The daily limit is a hard cap for planned work |

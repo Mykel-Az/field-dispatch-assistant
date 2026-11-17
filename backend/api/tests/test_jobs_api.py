@@ -168,8 +168,8 @@ def test_list_shape_and_isolation(dispatcher_a, org_a, org_b):
     assert row["id"] == mine.pk
     assert set(row) == {
         "id", "title", "customer_name", "address", "postal_code", "category",
-        "is_urgent", "status", "technician", "scheduled_date", "slot_start",
-        "slot_end", "geocode_status", "location_label",
+        "is_urgent", "priority", "status", "technician", "scheduled_date",
+        "slot_start", "slot_end", "slot_is_fixed", "geocode_status", "location_label",
     }  # fmt: skip
 
 

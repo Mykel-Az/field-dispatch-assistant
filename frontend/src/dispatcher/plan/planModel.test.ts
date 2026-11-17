@@ -1,136 +1,142 @@
-// What the plan page shows, worked out from the API result. Pure functions, so
-// they are easy to test and the page stays a thin layer of markup.
-import type { PlanReason, PlannedJob, Technician } from '../../shared/api/models';
-import { splitLocal } from '../../shared/jobTime';
+import { describe, expect, it } from 'vitest';
+import type { PlannedJob, Technician } from '../../shared/api/models';
+import {
+  addDays,
+  arrivalTime,
+  groupByTechnician,
+  rejectionLines,
+  slackText,
+  slaMeta,
+  summaryLine,
+  todayOnClock,
+} from './planModel';
 
-/** The server speaks in ids; these are the names it can be matched to. */
-export interface TechnicianPlan {
-  technicianId: number;
-  name: string;
-  /** "08:00–17:00", or '' when the technician is not in the loaded list. */
-  shift: string;
-  /** In the order the technician drives them. */
-  stops: PlannedJob[];
-}
+const tech = (id: number, name: string, start = '08:00:00', end = '17:00:00'): Technician =>
+  ({
+    id,
+    user: { id: id + 100, full_name: name },
+    skills: [],
+    shift_start: start,
+    shift_end: end,
+    phone: null,
+  }) as unknown as Technician;
 
-const hhmm = (t: string) => t.slice(0, 5);
+const stop = (job_id: number, technician_id: number, estimated_arrival: string): PlannedJob => ({
+  job_id,
+  technician_id,
+  estimated_arrival,
+  sla_label: 'ok',
+  slack_minutes: 30,
+  reasons: [],
+  sentence: '',
+});
 
-/** Group assigned jobs by technician: people A to Z, each person's stops by arrival. */
-export function groupByTechnician(
-  assigned: PlannedJob[],
-  technicians: Technician[],
-): TechnicianPlan[] {
-  const byId = new Map(technicians.map((t) => [t.id, t]));
-  const groups = new Map<number, TechnicianPlan>();
-  for (const stop of assigned) {
-    let group = groups.get(stop.technician_id);
-    if (!group) {
-      const tech = byId.get(stop.technician_id);
-      group = {
-        technicianId: stop.technician_id,
-        name: tech?.user.full_name ?? `Technician #${stop.technician_id}`,
-        shift: tech ? `${hhmm(tech.shift_start)}–${hhmm(tech.shift_end)}` : '',
-        stops: [],
-      };
-      groups.set(stop.technician_id, group);
-    }
-    group.stops.push(stop);
-  }
-  const plans = [...groups.values()];
-  plans.forEach((p) =>
-    p.stops.sort((a, b) => a.estimated_arrival.localeCompare(b.estimated_arrival)),
-  );
-  return plans.sort((a, b) => a.name.localeCompare(b.name));
-}
+describe('groupByTechnician', () => {
+  const techs = [tech(2, 'Sam'), tech(1, 'Alex', '09:00:00', '18:00:00')];
 
-export type SlaKey = 'ok' | 'at_risk' | 'breach';
-export interface SlaMeta {
-  label: string;
-  /** A glyph, so the state is not carried by colour alone. */
-  mark: string;
-  classes: string;
-}
-
-const SLA: Record<SlaKey, SlaMeta> = {
-  ok: { label: 'On time', mark: '✓', classes: 'bg-st-completed-soft text-st-completed' },
-  at_risk: { label: 'At risk', mark: '!', classes: 'bg-warn-soft text-warn-ink' },
-  breach: { label: 'Late', mark: '✕', classes: 'bg-danger-soft text-danger' },
-};
-
-/** False for a plan saved before the SLA was stored with it: show no badge then. */
-export const hasSla = (label: string): label is SlaKey => label in SLA;
-
-export function slaMeta(label: string): SlaMeta {
-  return SLA[label as SlaKey] ?? { label, mark: '?', classes: 'bg-canvas text-ink-muted' };
-}
-
-/** "48 min to spare" or "7 min late", rounded the same way as the sentence. */
-export function slackText(slackMinutes: number): string {
-  const whole = Math.floor(slackMinutes);
-  return whole < 0 ? `${-whole} min late` : `${whole} min to spare`;
-}
-
-/** "09:12" on the organization's clock. */
-export const arrivalTime = (iso: string, tz?: string) => splitLocal(iso, tz).time;
-
-/** One line for the top of the results. */
-export function summaryLine(counts: {
-  assigned: number;
-  technicians: number;
-  unassigned: number;
-  skipped: number;
-}): string {
-  const jobs = (n: number) => `${n} job${n === 1 ? '' : 's'}`;
-  const parts: string[] = [];
-  if (counts.assigned > 0) {
-    parts.push(
-      `Planned ${jobs(counts.assigned)} across ${counts.technicians} technician${
-        counts.technicians === 1 ? '' : 's'
-      }`,
+  it('groups by technician, people A to Z, stops in arrival order', () => {
+    const plans = groupByTechnician(
+      [
+        stop(10, 2, '2026-11-02T20:00:00Z'),
+        stop(11, 1, '2026-11-02T16:00:00Z'),
+        stop(12, 2, '2026-11-02T15:00:00Z'),
+      ],
+      techs,
     );
-  }
-  if (counts.unassigned > 0) parts.push(`${jobs(counts.unassigned)} could not be assigned`);
-  if (counts.skipped > 0) {
-    parts.push(`${jobs(counts.skipped)} ${counts.skipped === 1 ? 'needs' : 'need'} a location`);
-  }
-  return parts.join(' · ');
-}
+    expect(plans.map((p) => p.name)).toEqual(['Alex', 'Sam']);
+    expect(plans[1].stops.map((s) => s.job_id)).toEqual([12, 10]);
+  });
 
-const REJECTION_TEXT: Record<string, (facts: Record<string, unknown>) => string> = {
-  unavailable: () => 'is unavailable',
-  skill_mismatch: () => 'does not have a matching skill',
-  daily_limit: (f) => `has reached the daily limit of ${String(f.limit)} jobs`,
-  after_closing: (f) => `would arrive ${String(f.minutes_after_closing)} min after closing`,
-};
+  it('shows the shift without seconds', () => {
+    const [alex] = groupByTechnician([stop(1, 1, '2026-11-02T16:00:00Z')], techs);
+    expect(alex.shift).toBe('09:00–18:00');
+  });
 
-/**
- * The "why not the others?" lines: one per technician the planner passed over,
- * for example "Alex is unavailable". Codes that explain the choice itself are
- * left to the sentence.
- */
-export function rejectionLines(reasons: PlanReason[], technicians: Technician[]): string[] {
-  const names = new Map(technicians.map((t) => [t.id, t.user.full_name]));
-  const lines: string[] = [];
-  for (const reason of reasons) {
-    const text = REJECTION_TEXT[reason.code];
-    if (!text) continue;
-    const facts = reason.facts as Record<string, unknown>;
-    const id = Number(facts.technician_id);
-    lines.push(`${names.get(id) ?? `Technician #${id}`} ${text(facts)}`);
-  }
-  return lines;
-}
+  it('copes with a technician that is not in the loaded list', () => {
+    const [plan] = groupByTechnician([stop(1, 99, '2026-11-02T16:00:00Z')], techs);
+    expect(plan.name).toBe('Technician #99');
+    expect(plan.shift).toBe('');
+  });
 
-/** "2026-11-08" plus `days`, calendar arithmetic only (no time zones involved). */
-export function addDays(date: string, days: number): string {
-  const [y, m, d] = date.split('-').map(Number);
-  const next = new Date(Date.UTC(y, m - 1, d + days));
-  return next.toISOString().slice(0, 10);
-}
+  it('returns nothing for nothing', () => {
+    expect(groupByTechnician([], techs)).toEqual([]);
+  });
+});
 
-/** Today's date on the organization's clock. */
-export const todayOnClock = (tz?: string, now: Date = new Date()) =>
-  splitLocal(now.toISOString(), tz).date;
+describe('slackText', () => {
+  it.each([
+    [48.9, '48 min to spare'],
+    [0, '0 min to spare'],
+    [-6.2, '7 min late'],
+    [-0.5, '1 min late'],
+  ])('%f -> %s', (slack, text) => expect(slackText(slack)).toBe(text));
+});
 
-/** The longest lookahead the API accepts (ADR-010). */
-export const MAX_DAYS_AHEAD = 7;
+describe('slaMeta', () => {
+  it('names each label in words as well as colour', () => {
+    expect(slaMeta('ok').label).toBe('On time');
+    expect(slaMeta('at_risk').label).toBe('At risk');
+    expect(slaMeta('breach').label).toBe('Late');
+  });
+  it('does not crash on a label it does not know', () => {
+    expect(slaMeta('mystery').label).toBe('mystery');
+  });
+});
+
+describe('summaryLine', () => {
+  it('joins only the parts that exist', () => {
+    expect(summaryLine({ assigned: 5, technicians: 3, unassigned: 2, skipped: 1 })).toBe(
+      'Planned 5 jobs across 3 technicians · 2 jobs could not be assigned · 1 job needs a location',
+    );
+  });
+  it('says "need" for several jobs without a location', () => {
+    expect(summaryLine({ assigned: 0, technicians: 0, unassigned: 0, skipped: 2 })).toBe(
+      '2 jobs need a location',
+    );
+  });
+  it('uses singular forms', () => {
+    expect(summaryLine({ assigned: 1, technicians: 1, unassigned: 0, skipped: 0 })).toBe(
+      'Planned 1 job across 1 technician',
+    );
+  });
+});
+
+describe('rejectionLines', () => {
+  const techs = [tech(1, 'Alex'), tech(2, 'Sam'), tech(3, 'Jo')];
+  it('names each technician that was passed over and why', () => {
+    const lines = rejectionLines(
+      [
+        { code: 'assigned', facts: { technician_id: 1 } },
+        { code: 'unavailable', facts: { technician_id: 2 } },
+        { code: 'daily_limit', facts: { technician_id: 3, limit: 4, assigned_count: 4 } },
+        { code: 'skill_mismatch', facts: { technician_id: 9 } },
+        { code: 'after_closing', facts: { technician_id: 1, minutes_after_closing: 7 } },
+      ],
+      techs,
+    );
+    expect(lines).toEqual([
+      'Sam is unavailable',
+      'Jo has reached the daily limit of 4 jobs',
+      'Technician #9 does not have a matching skill',
+      'Alex would arrive 7 min after closing',
+    ]);
+  });
+  it('has nothing to say when nobody was passed over', () => {
+    expect(rejectionLines([{ code: 'assigned', facts: { technician_id: 1 } }], techs)).toEqual([]);
+  });
+});
+
+describe('dates', () => {
+  it('adds days across a month end', () => {
+    expect(addDays('2026-11-28', 5)).toBe('2026-12-03');
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01');
+  });
+  it('takes today from the organization clock, not the browser clock', () => {
+    const lateInLagos = new Date('2026-11-03T03:00:00Z'); // still 2 Nov in Chicago
+    expect(todayOnClock('America/Chicago', lateInLagos)).toBe('2026-11-02');
+    expect(todayOnClock('Pacific/Auckland', lateInLagos)).toBe('2026-11-03');
+  });
+  it('shows arrivals on the organization clock', () => {
+    expect(arrivalTime('2026-11-02T15:12:00Z', 'America/Chicago')).toBe('09:12');
+  });
+});

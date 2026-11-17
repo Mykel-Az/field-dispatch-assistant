@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models';
+import { FROM_PLAN } from '../../shared/useBack';
 import { ui } from '../../shared/ui';
 import {
   arrivalTime,
@@ -86,7 +87,7 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
                     </span>
                     <Link
                       className="font-semibold text-brand-ink underline"
-                      to={`/jobs/${stop.job_id}`}
+                      to={`/jobs/${stop.job_id}`} state={FROM_PLAN}
                     >
                       {titleOf(jobs, stop.job_id)}
                     </Link>
@@ -114,14 +115,14 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
           <ul className="grid gap-3">
             {result.unassigned.map((job) => (
               <li key={job.job_id} className="rounded-xl border border-warn-ink/30 bg-warn-soft p-4">
-                <Link className="font-semibold text-warn-ink underline" to={`/jobs/${job.job_id}`}>
+                <Link className="font-semibold text-warn-ink underline" to={`/jobs/${job.job_id}`} state={FROM_PLAN}>
                   {titleOf(jobs, job.job_id)}
                 </Link>
                 <p className="mt-1 text-sm text-warn-ink">{job.sentence}</p>
                 <Why lines={rejectionLines(job.reasons, technicians)} />
                 <Link
                   className={`${ui.btnSmall} mt-3 inline-flex items-center`}
-                  to={`/jobs/${job.job_id}`}
+                  to={`/jobs/${job.job_id}`} state={FROM_PLAN}
                 >
                   Assign by hand
                 </Link>
@@ -137,13 +138,13 @@ export default function PlanResults({ result, technicians, jobs, timezone }: Pro
           <ul className="grid gap-3">
             {result.skipped.map((job) => (
               <li key={job.job_id} className="rounded-xl border border-line bg-surface p-4">
-                <Link className="font-semibold text-brand-ink underline" to={`/jobs/${job.job_id}`}>
+                <Link className="font-semibold text-brand-ink underline" to={`/jobs/${job.job_id}`} state={FROM_PLAN}>
                   {titleOf(jobs, job.job_id)}
                 </Link>
                 <p className="mt-1 text-sm text-ink-muted">{job.sentence}</p>
                 <Link
                   className={`${ui.btnSmall} mt-3 inline-flex items-center`}
-                  to={`/jobs/${job.job_id}`}
+                  to={`/jobs/${job.job_id}`} state={FROM_PLAN}
                 >
                   Fix the location
                 </Link>

@@ -13,7 +13,7 @@ export default function OrganizationPage() {
   const { user, refreshUser } = useAuth();
   const canEdit = user?.role === 'head_dispatcher';
   const [org, setOrg] = useState<Organization | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', lat: '', lng: '', work_start: '', work_end: '', timezone: 'America/Chicago' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', lat: '', lng: '', work_start: '', work_end: '', timezone: 'America/Chicago', max_jobs: '3', strategy: 'balanced' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -24,6 +24,7 @@ export default function OrganizationPage() {
       name: o.name, email: o.email ?? '', phone: o.phone ?? '', address: o.address ?? '',
       lat: o.lat === null ? '' : String(o.lat), lng: o.lng === null ? '' : String(o.lng),
       work_start: hhmm(o.work_start), work_end: hhmm(o.work_end), timezone: o.timezone,
+      max_jobs: String(o.max_jobs_per_tech_per_day), strategy: o.scoring_strategy,
     });
   }
 
@@ -49,6 +50,8 @@ export default function OrganizationPage() {
         work_start: form.work_start || null,
         work_end: form.work_end || null,
         timezone: form.timezone,
+        max_jobs_per_tech_per_day: Number(form.max_jobs),
+        scoring_strategy: form.strategy as Organization['scoring_strategy'],
       });
       apply(saved);
       setOrgTimezone(saved.timezone); // every screen redraws its times on the new clock
@@ -114,6 +117,38 @@ export default function OrganizationPage() {
           {f('work_start', 'Working day starts', 'time')}
           {f('work_end', 'Working day ends', 'time')}
         </div>
+        <h2 className={ui.h2}>Planning</h2>
+        <label className={ui.label}>
+          Most jobs per technician per day
+          <input
+            className={ui.input}
+            type="number"
+            min={1}
+            max={10}
+            step={1}
+            value={form.max_jobs}
+            disabled={!canEdit}
+            onChange={(e) => setForm({ ...form, max_jobs: e.target.value })}
+          />
+          <span className="text-sm font-normal text-ink-muted">
+            The planner never gives a technician more than this on one day. Urgent jobs can go over it when no one
+            else can take them in time. Assigning by hand is not limited, but warns you.
+          </span>
+          {errors.max_jobs_per_tech_per_day && <span className={ui.error}>{errors.max_jobs_per_tech_per_day}</span>}
+        </label>
+        <label className={ui.label}>
+          How the planner chooses a technician
+          <select
+            className={ui.input}
+            value={form.strategy}
+            disabled={!canEdit}
+            onChange={(e) => setForm({ ...form, strategy: e.target.value })}
+          >
+            <option value="balanced">Balanced: shorter drives, even workload, on-time arrivals</option>
+            <option value="nearest">Nearest: the closest technician who can make it</option>
+          </select>
+          {errors.scoring_strategy && <span className={ui.error}>{errors.scoring_strategy}</span>}
+        </label>
         {errors._ && <p role="alert" className={ui.error}>{errors._}</p>}
         {message && <p role="status">{message}</p>}
         {canEdit ? <button className={ui.btn} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button> : <p className={ui.muted}>Only a head dispatcher can edit these settings.</p>}

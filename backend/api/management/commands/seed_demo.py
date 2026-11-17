@@ -440,6 +440,28 @@ JOBS = [
     ),
 ]
 
+# Planning scenarios: they exist to make the planner's decisions visible, so the org
+# limit is 2 a day (see _create_organization) and a few jobs cannot all fit.
+# day offset, title, customer, category, address, zip, start hour, hours,
+# priority, "anytime" (customer free all day: the opening hours are the window),
+# skills (None = the category's usual skills).
+NOBODY_SKILL = (
+    "Boiler (certified)"  # no demo technician has it: "Why not the others?" shows why
+)
+PLANNING_JOBS = [
+    (1, "Water heater anode check", "Tulip Bakery", "appliance", "812 Lavaca St", "78701", 11, 1, "high", False, None),
+    (1, "Smoke alarm battery swap", "Orchard Flats", "electrical", "44 Orchard Ln", "78702", 0, 0, "low", True, None),
+    (2, "Rooftop unit swap", "Greenway Offices", "hvac", "700 Lavaca St", "78701", 9, 3, "high", False, None),
+    (2, "Furnace not heating", "Okafor Residence", "hvac", "210 Tillery St", "78702", 8, 2, "high", False, None),
+    (2, "Panel inspection", "Eastside Bakery", "electrical", "1500 E 6th St", "78702", 10, 1, "normal", False, None),
+    (2, "Condenser coil cleaning", "Mesa Drive Homes", "hvac", "12 Mesa Dr", "78731", 13, 1, "normal", False, None),
+    (2, "Wire a new office", "Brook & Vale Law", "electrical", "301 Brazos St", "78701", 0, 0, "low", True, None),
+    (2, "Attic fan install", "Hart Residence", "electrical", "9 Rosewood Ave", "78702", 0, 0, "normal", True, None),
+    (3, "Boiler inspection", "Capitol Lofts", "hvac", "1100 Red River St", "78701", 10, 2, "normal", False, [NOBODY_SKILL]),
+    (3, "Duct check", "Lakeview Dental", "hvac", "1200 Barton Springs Rd", "78704", 0, 0, "normal", True, None),
+    (3, "Replace GFCI outlets", "Wilshire Rentals", "electrical", "31 Wilshire Blvd", "78722", 0, 0, "low", True, None),
+]  # fmt: skip
+
 BULK_TITLES = [
     ("Service call", "hvac"), ("Wiring inspection", "electrical"), ("Appliance repair", "appliance"),
     ("Filter replacement", "hvac"), ("Fuse box check", "electrical"), ("Stove igniter", "appliance"),
@@ -490,6 +512,7 @@ class Command(BaseCommand):
                 return
             org, users = self._create_organization()
             self._create_jobs(org, users)
+            self._create_planning_jobs(org, users)
             if options["bulk"]:
                 self._create_bulk(org, users, options["bulk"])
             self._create_other_organization()
@@ -529,6 +552,7 @@ class Command(BaseCommand):
             geocode_status="ok", location_label="100 Congress Ave, Austin, TX 78701",
             work_start=datetime.time(7), work_end=datetime.time(18),
             timezone="America/Chicago",
+            max_jobs_per_tech_per_day=2,  # low on purpose: a plan then shows the limit at work
         )  # fmt: skip
         users = {}
         for email, name, role, skill_names in STAFF:
@@ -587,6 +611,32 @@ class Command(BaseCommand):
                 **fields,
             )
             self._walk(job, path, users, tech)
+
+    def _create_planning_jobs(self, org, users):
+        """Jobs with a priority, jobs that are free any time that day, and one that
+        nobody has the skill for. All unassigned: run the planner to see them placed."""
+        today = timezone.now().astimezone(CENTRAL).date()
+        nobody, _ = Skill.objects.get_or_create(name=NOBODY_SKILL)
+        for (
+            offset, title, customer, category, address, zip_code, hour, hours,
+            priority, anytime, skill_names,
+        ) in PLANNING_JOBS:  # fmt: skip
+            day = today + datetime.timedelta(days=offset)
+            if anytime:
+                start, end = svc.opening_window(org, day)
+            else:
+                start = datetime.datetime.combine(
+                    day, datetime.time(hour), tzinfo=CENTRAL
+                )
+                end = start + datetime.timedelta(hours=hours)
+            skills = [nobody] if skill_names else svc.default_skills_for(category)
+            svc.create_job(
+                organization=org, actor=users["dispatcher"], skills=skills,
+                title=title, customer_name=customer, category=category, address=address,
+                postal_code=zip_code, scheduled_date=day, slot_start=start, slot_end=end,
+                slot_is_fixed=not anytime, priority=priority,
+                estimated_duration_minutes=60 if anytime else hours * 60,
+            )  # fmt: skip
 
     def _walk(self, job, path, users, tech_key):
         for step in path:

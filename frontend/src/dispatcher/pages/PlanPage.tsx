@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import {
   fetchJobs,
@@ -79,7 +79,11 @@ export default function PlanPage() {
   const { user } = useAuth();
   const timezone = user?.organization.timezone;
   const today = todayOnClock(timezone);
-  const [date, setDate] = useState(today);
+  // The chosen day lives in the URL, so coming back from a job opens the same day.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get('date') ?? '';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : today;
+  const setDate = (next: string) => setParams(next ? { date: next } : {}, { replace: true });
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [failure, setFailure] = useState<Failure | null>(null);
