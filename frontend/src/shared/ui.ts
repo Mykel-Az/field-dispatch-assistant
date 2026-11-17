@@ -8,7 +8,7 @@ export const ui = {
   form: 'grid gap-4',
   label: 'grid gap-1 text-sm font-medium text-ink-muted',
   input:
-    'min-h-11 rounded-xl border-[1.5px] border-line-strong bg-surface px-3 py-2 text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-canvas disabled:text-ink-muted',
+    'min-h-11 w-full min-w-0 rounded-xl border-[1.5px] border-line-strong bg-surface px-3 py-2 text-ink focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:bg-canvas disabled:text-ink-muted',
   btn: 'min-h-11 rounded-full bg-brand px-5 py-2 font-semibold text-on-brand shadow-sm hover:bg-brand-hover disabled:cursor-default disabled:opacity-60',
   btnSmall:
     'min-h-11 rounded-full border-[1.5px] border-line-strong bg-surface px-4 py-1 text-sm font-semibold hover:bg-canvas disabled:cursor-default disabled:opacity-60',

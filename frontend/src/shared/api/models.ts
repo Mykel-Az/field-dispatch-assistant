@@ -95,6 +95,7 @@ export type PlanReason = components['schemas']['PlanReason'];
 export type JobRow = components['schemas']['Job'];
 export type JobDetail = components['schemas']['JobDetail'];
 export type JobHistoryRow = components['schemas']['JobHistory'];
+export type JobPriority = components['schemas']['PriorityEnum'];
 export type JobCreateInput = components['schemas']['JobCreate'];
 export type JobUpdateInput = components['schemas']['PatchedJobUpdate'] & { version: number };
 export type JobCategory = components['schemas']['CategoryEnum'];

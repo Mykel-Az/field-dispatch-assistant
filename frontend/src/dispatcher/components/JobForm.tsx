@@ -17,6 +17,7 @@ import {
   type JobCategory,
   type JobCreateInput,
   type JobDetail,
+  type JobPriority,
 } from '../../shared/api/models';
 import { splitLocal, toIso, zoneAbbreviation } from '../../shared/jobTime';
 import { timezoneLabel } from '../../shared/api/models';
@@ -40,6 +41,11 @@ function deriveTitle(description: string, category: JobCategory): string {
 const hhmm = (t: string | null | undefined, fallback: string) =>
   t ? t.slice(0, 5) : fallback;
 const CATEGORIES = Object.keys(CATEGORY_LABEL) as JobCategory[];
+const PRIORITIES: { value: JobPriority; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'high', label: 'High' },
+];
 
 interface Props {
   /** Present = edit this job; absent = create a new one. */
@@ -74,6 +80,11 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     String(job?.estimated_duration_minutes ?? ''),
   );
   const [urgent, setUrgent] = useState(job?.is_urgent ?? false);
+  const [priority, setPriority] = useState<JobPriority>(job?.priority ?? 'normal');
+  // "Any time that day": the customer agreed to the day only. Sent as the day, and
+  // the server turns it into the opening hours.
+  const [anyTime, setAnyTime] = useState(job ? job.slot_is_fixed === false : false);
+  const [hours, setHours] = useState<{ from: string; to: string } | null>(null);
   const [slotDate, setSlotDate] = useState(start?.date ?? '');
   // The window defaults to the organization's working day, so most jobs need no typing here.
   const [slotStart, setSlotStart] = useState(start?.time ?? '08:00');
@@ -91,15 +102,15 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     fetchSkills()
       .then(setSkills)
       .catch(() => setSkills([]));
-    if (!editing) {
-      fetchOrganization()
-        .then((o) => {
-          setSlotStart(hhmm(o.work_start, '08:00'));
-          setSlotEnd(hhmm(o.work_end, '17:00'));
-          if (o.lat != null && o.lng != null) setOffice({ lat: o.lat, lng: o.lng });
-        })
-        .catch(() => undefined);
-    }
+    fetchOrganization()
+      .then((o) => {
+        setHours({ from: hhmm(o.work_start, '08:00'), to: hhmm(o.work_end, '17:00') });
+        if (editing) return;
+        setSlotStart(hhmm(o.work_start, '08:00'));
+        setSlotEnd(hhmm(o.work_end, '17:00'));
+        if (o.lat != null && o.lng != null) setOffice({ lat: o.lat, lng: o.lng });
+      })
+      .catch(() => undefined);
   }, [editing]);
 
   const zipInAddress = TRAILING_ZIP.exec(address.trim())?.[1] ?? null;
@@ -147,7 +158,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
       if (!ZIP.test(zip)) found.postal_code = 'Add the ZIP code, like 12345.';
       if (!urgent) {
         if (!slotDate) found.slot_start = 'Pick the day.';
-        else if (slotEnd <= slotStart)
+        else if (!anyTime && slotEnd <= slotStart)
           found.slot_end = 'Must be later than the start.';
       }
       if (skillIds.length === 0) found.skill_ids = 'Select at least one skill.';
@@ -166,7 +177,9 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     const phone = customerPhone.trim() === '' ? null : customerPhone.trim();
     const slot = urgent
       ? { slot_start: null, slot_end: null }
-      : {
+      : anyTime
+        ? { any_time_on: slotDate }
+        : {
           slot_start: toIso(slotDate, slotStart),
           slot_end: toIso(slotDate, slotEnd),
         };
@@ -182,6 +195,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           customer_name: customerName,
           customer_phone: phone,
           category,
+          priority, // not a plan field: it can change on a planned job
           ...(locked
             ? {}
             : {
@@ -201,6 +215,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           customer_phone: phone,
           category,
           is_urgent: urgent,
+          priority,
           address,
           postal_code: zip,
           estimated_duration_minutes: Number(minutes),
@@ -406,6 +421,28 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           </p>
         ) : (
           <>
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Time on the day">
+              {[
+                { value: false, label: 'A time window' },
+                { value: true, label: 'Any time that day' },
+              ].map((o) => (
+                <button
+                  key={o.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={anyTime === o.value}
+                  disabled={locked}
+                  onClick={() => setAnyTime(o.value)}
+                  className={`min-h-11 rounded-full border-[1.5px] px-4 text-sm font-semibold disabled:opacity-60 ${
+                    anyTime === o.value
+                      ? 'border-brand bg-brand-soft text-brand-ink'
+                      : 'border-line-strong bg-surface hover:bg-canvas'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
             <div className={ui.row}>
               <label className={ui.label}>
                 Day
@@ -418,6 +455,8 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
                 />
                 {fieldError('slot_start')}
               </label>
+              {!anyTime && (
+              <>
               <label className={ui.label}>
                 Available from
                 <input
@@ -439,14 +478,50 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
                 />
                 {fieldError('slot_end')}
               </label>
+              </>
+              )}
             </div>
-            <p className={ui.muted}>
-              When someone can be at the address, in {timezoneLabel(zone)} time (
-              {zoneAbbreviation(zone)}). The system picks the exact visit time
-              inside this window.
-            </p>
+            {anyTime ? (
+              <p className={ui.muted}>
+                The customer is free all day, so the system may plan this job anywhere in your
+                opening hours{hours ? ` (${hours.from}–${hours.to})` : ''}, in {timezoneLabel(zone)} time.
+                {fieldError('any_time_on')}
+              </p>
+            ) : (
+              <p className={ui.muted}>
+                When someone can be at the address, in {timezoneLabel(zone)} time (
+                {zoneAbbreviation(zone)}). The system picks the exact visit time
+                inside this window.
+              </p>
+            )}
           </>
         )}
+      </Section>
+
+      <Section title="Priority">
+        <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Priority">
+          {PRIORITIES.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={priority === o.value}
+              onClick={() => setPriority(o.value)}
+              className={`min-h-11 rounded-full border-[1.5px] px-4 text-sm font-semibold ${
+                priority === o.value
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-line-strong bg-surface hover:bg-canvas'
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className={ui.muted}>
+          When there is not room for every job, high priority jobs are placed first. It never
+          overrides a skill, the opening hours or the daily limit.
+        </p>
+        {fieldError('priority')}
       </Section>
 
       <details className="rounded-xl border border-line bg-canvas px-4 py-3">

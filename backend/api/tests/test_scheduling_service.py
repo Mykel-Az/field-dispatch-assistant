@@ -87,6 +87,19 @@ def test_the_history_row_names_the_dispatcher_and_the_technician(
     assert row.changed_by == dispatcher_a and row.technician_id == tech.pk
 
 
+def test_a_planned_assignment_is_recorded_as_the_planners_and_a_manual_one_is_not(
+    org, dispatcher_a, tech
+):
+    planned = job(org)
+    by_hand = job(org)
+    job_service.transition(by_hand, "assigned", dispatcher_a, technician=tech)
+    run(org, dispatcher_a)
+    row = JobStatusHistory.objects.get(job=planned, to_status="assigned")
+    assert (row.source, row.changed_by) == ("planner", dispatcher_a)  # run by them
+    hand = JobStatusHistory.objects.get(job=by_hand, to_status="assigned")
+    assert hand.source == "manual"
+
+
 def test_the_explanation_is_stored_with_reasons_and_a_sentence(org, dispatcher_a, tech):
     j = job(org)
     run(org, dispatcher_a)

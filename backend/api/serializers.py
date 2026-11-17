@@ -323,6 +323,7 @@ class JobHistorySerializer(serializers.ModelSerializer):
             "to_status",
             "reason",
             "changed_by",
+            "source",
             "created_at",
         ]
         read_only_fields = fields

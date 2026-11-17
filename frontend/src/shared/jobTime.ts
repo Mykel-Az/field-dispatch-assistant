@@ -88,6 +88,20 @@ export function formatSlot(start: string | null, end: string | null, tz: string 
   return `${dayMonth(a, tz)} ${clock(start, tz)} – ${dayMonth(b, tz)} ${clock(end, tz)}`;
 }
 
+/**
+ * When a job is to be done. An agreed window reads "Mon 09:00–11:00"; a job the
+ * customer is free for all day reads "Mon, any time" with the hours it may use.
+ */
+export function formatWhen(
+  job: { slot_start: string | null; slot_end: string | null; slot_is_fixed?: boolean },
+  tz: string = zone,
+): string {
+  if (job.slot_is_fixed !== false || !job.slot_start || !job.slot_end) {
+    return formatSlot(job.slot_start, job.slot_end, tz);
+  }
+  return `${weekday(new Date(job.slot_start), tz)}, any time (${clock(job.slot_start, tz)}–${clock(job.slot_end, tz)})`;
+}
+
 /** "Nov 2, 09:14" for the history list. */
 export const formatStamp = (iso: string, tz: string = zone) =>
   `${fmt(tz, 'md', { month: 'short', day: 'numeric' }).format(new Date(iso))}, ${clock(iso, tz)}`;

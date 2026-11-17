@@ -1296,6 +1296,10 @@ components:
           - $ref: '#/components/schemas/JobActor'
           readOnly: true
           nullable: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1306,6 +1310,7 @@ components:
       - from_status
       - id
       - reason
+      - source
       - to_status
     JobPin:
       type: object
@@ -1875,6 +1880,14 @@ components:
       - code
       - job_id
       - sentence
+    SourceEnum:
+      enum:
+      - manual
+      - planner
+      type: string
+      description: |-
+        * `manual` - A person
+        * `planner` - The planner
     StaffCreate:
       type: object
       description: Input for POST /users/. There is deliberately no `organization`

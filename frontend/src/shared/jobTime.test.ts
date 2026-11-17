@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatSlot, formatStamp, placeLine, splitLocal, toIso, zoneAbbreviation } from './jobTime';
+import { formatSlot, formatStamp, formatWhen, placeLine, splitLocal, toIso, zoneAbbreviation } from './jobTime';
 
 const CHI = 'America/Chicago';
 
@@ -37,6 +37,18 @@ describe('slot times on the organization clock', () => {
 
   it('handles urgent jobs, which have no window', () => {
     expect(formatSlot(null, null)).toBe('No time window');
+  });
+
+  it('says "any time" with the usable hours for a job with no agreed time', () => {
+    const slot = { slot_start: toIso('2026-11-02', '07:00', CHI), slot_end: toIso('2026-11-02', '18:00', CHI) };
+    expect(formatWhen({ ...slot, slot_is_fixed: false }, CHI)).toBe('Mon, any time (07:00–18:00)');
+  });
+
+  it('reads an agreed window, and an urgent job, as before', () => {
+    const slot = { slot_start: toIso('2026-11-02', '09:00', CHI), slot_end: toIso('2026-11-02', '11:00', CHI) };
+    expect(formatWhen({ ...slot, slot_is_fixed: true }, CHI)).toBe('Mon 09:00–11:00');
+    expect(formatWhen(slot, CHI)).toBe('Mon 09:00–11:00');
+    expect(formatWhen({ slot_start: null, slot_end: null, slot_is_fixed: true })).toBe('No time window');
   });
 
   it('formats history stamps on the same clock', () => {

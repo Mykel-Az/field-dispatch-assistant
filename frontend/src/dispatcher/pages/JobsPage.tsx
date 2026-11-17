@@ -7,7 +7,8 @@ import JobFilterBar from '../../shared/components/JobFilterBar';
 import StatusBadge from '../../shared/components/StatusBadge';
 import StatusPin from '../../shared/components/StatusPin';
 import { hasFilters, NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
-import { formatSlot, placeLine } from '../../shared/jobTime';
+import JobTags from '../../shared/components/JobTags';
+import { formatWhen, placeLine } from '../../shared/jobTime';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import { usePolling } from '../../shared/usePolling';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
@@ -46,6 +47,7 @@ function JobCard({ job }: { job: JobRow }) {
             {job.is_urgent && (
               <span className="rounded-full bg-danger-soft px-2.5 py-0.5 text-xs font-bold text-danger">Urgent</span>
             )}
+            <JobTags job={job} />
           </div>
           <div className="text-ink-muted">
             {job.customer_name} · {CATEGORY_LABEL[job.category]}
@@ -60,7 +62,7 @@ function JobCard({ job }: { job: JobRow }) {
           )}
         </div>
         <div className="flex-[0_1_11rem]">
-          <div className="font-semibold">{formatSlot(job.slot_start, job.slot_end)}</div>
+          <div className="font-semibold">{formatWhen(job)}</div>
           <div className="text-sm text-ink-muted">{job.technician?.full_name ?? 'Not assigned'}</div>
         </div>
         <span className="lg:justify-self-end"><StatusBadge status={job.status} /></span>
