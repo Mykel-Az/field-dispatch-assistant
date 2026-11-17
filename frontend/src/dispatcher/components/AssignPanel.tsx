@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
   assignJob,
+  fetchMapJobs,
+  fetchOrganization,
   fetchTechnicians,
   unassignJob,
 } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import type { JobDetail, Technician } from '../../shared/api/models';
+import { NO_FILTERS } from '../../shared/filters';
+import { splitLocal } from '../../shared/jobTime';
 import { notifyJobsChanged } from '../../shared/usePolling';
+import { countByTechnician, limitWarning, loadText } from './loadModel';
 import { ui } from '../../shared/ui';
 
 interface Props {
@@ -25,8 +30,13 @@ export default function AssignPanel({ job, onChanged }: Props) {
   const [picked, setPicked] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // How busy each technician already is on this job's day. Best effort: if it
+  // cannot be loaded, assigning still works, just without the load hints.
+  const [loads, setLoads] = useState<Map<number, number> | null>(null);
+  const [limit, setLimit] = useState<number | null>(null);
 
   const unassigned = job.status === 'unassigned';
+  const day = job.scheduled_date ?? (job.slot_start ? splitLocal(job.slot_start).date : '');
 
   useEffect(() => {
     if (!unassigned) return;
@@ -36,6 +46,25 @@ export default function AssignPanel({ job, onChanged }: Props) {
       .finally(() => setLoaded(true));
   }, [unassigned]);
 
+  useEffect(() => {
+    if (!unassigned || !day) return;
+    let live = true;
+    Promise.all([
+      fetchOrganization(),
+      fetchMapJobs({ ...NO_FILTERS, statuses: ['assigned', 'ongoing'], date: day }),
+    ])
+      .then(([org, pins]) => {
+        if (!live) return;
+        setLimit(org.max_jobs_per_tech_per_day);
+        // A truncated map answer would undercount, so show no counts rather than wrong ones.
+        setLoads(pins.truncated ? null : countByTechnician(pins.results));
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [unassigned, day]);
+
   const wanted = new Set(job.acceptable_skills.map((s) => s.id));
   const matches = (t: Technician) => t.skills.some((s) => wanted.has(s.id));
   const sorted = [...technicians].sort(
@@ -44,6 +73,10 @@ export default function AssignPanel({ job, onChanged }: Props) {
       a.user.full_name.localeCompare(b.user.full_name),
   );
   const pickedTech = technicians.find((t) => t.id === picked);
+  const warning =
+    pickedTech && loads
+      ? limitWarning(pickedTech.user.full_name, loads.get(pickedTech.id) ?? 0, limit, job.is_urgent)
+      : null;
 
   async function run(action: () => Promise<JobDetail>) {
     setBusy(true);
@@ -138,6 +171,7 @@ export default function AssignPanel({ job, onChanged }: Props) {
                       <span className="font-semibold">{t.user.full_name}</span>
                       <span className="block text-xs text-ink-muted">
                         {t.skills.map((s) => s.name).join(', ') || 'No skills'}
+                        {loads && ` · ${loadText(loads.get(t.id) ?? 0, limit)}`}
                       </span>
                     </span>
                     <span
@@ -158,6 +192,11 @@ export default function AssignPanel({ job, onChanged }: Props) {
             <p className={`${ui.muted} mt-2`}>
               {pickedTech.user.full_name} does not have the skill listed for
               this job. You can still assign them.
+            </p>
+          )}
+          {warning && (
+            <p role="status" className={`${ui.notice} mt-2`}>
+              {warning}
             </p>
           )}
           {error && (

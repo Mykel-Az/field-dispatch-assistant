@@ -1,5 +1,6 @@
 """All writes to jobs. Nothing else may write Job.status (ADR-008)."""
 
+import datetime
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
@@ -45,6 +46,7 @@ PLAN_FIELDS = (
     "slot_start",
     "slot_end",
     "scheduled_date",
+    "slot_is_fixed",
     "estimated_duration_minutes",
 )
 
@@ -75,11 +77,43 @@ def local_date(moment, tz_name):
     return (moment or timezone.now()).astimezone(zone).date()
 
 
+class OpeningHoursMissing(ValueError):
+    """A job for "any time that day" needs opening hours to mean anything."""
+
+
+def opening_window(organization, day):
+    """The organization's opening hours on `day`, as aware datetimes.
+
+    This is the window of an "any time that day" job (ADR-021): the customer
+    agreed to the day, not to a time, so the planner may use any of the hours the
+    business is open.
+    """
+    if organization.work_start is None or organization.work_end is None:
+        raise OpeningHoursMissing("Set the opening hours in Organization first.")
+    zone = ZoneInfo(organization.timezone)
+    return (
+        datetime.datetime.combine(day, organization.work_start, tzinfo=zone),
+        datetime.datetime.combine(day, organization.work_end, tzinfo=zone),
+    )
+
+
 def rederive_dates(organization):
-    """After the organization's time zone changes: move each job with a time
-    window to the day it falls on in the new zone. Urgent jobs keep their day."""
+    """After the organization's time zone or opening hours change.
+
+    A job with an agreed time moves to the day that time falls on in the new
+    zone. An "any time that day" job keeps its day, the day being what was agreed,
+    and, while it is still unassigned, takes the new opening hours as its window.
+    A planned one keeps the window it was planned in. Urgent jobs keep their day.
+    """
     changed = 0
     for job in Job.objects.filter(organization=organization, slot_start__isnull=False):
+        if not job.slot_is_fixed:
+            if job.status == JobStatus.UNASSIGNED and job.scheduled_date:
+                start, end = opening_window(organization, job.scheduled_date)
+                if (start, end) != (job.slot_start, job.slot_end):
+                    Job.objects.filter(pk=job.pk).update(slot_start=start, slot_end=end)
+                    changed += 1
+            continue
         day = local_date(job.slot_start, organization.timezone)
         if day != job.scheduled_date:
             Job.objects.filter(pk=job.pk).update(scheduled_date=day)

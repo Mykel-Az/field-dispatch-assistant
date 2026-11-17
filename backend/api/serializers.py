@@ -290,11 +290,13 @@ class JobSerializer(serializers.ModelSerializer):
             "postal_code",
             "category",
             "is_urgent",
+            "priority",
             "status",
             "technician",
             "scheduled_date",
             "slot_start",
             "slot_end",
+            "slot_is_fixed",
             "geocode_status",
             "location_label",
         ]
@@ -376,6 +378,30 @@ class _JobInputMixin:
             )
 
     @staticmethod
+    def _resolve_window(attrs, *, organization, is_urgent):
+        """One of three ways to say when: a time window (fixed), `any_time_on` a
+        day (the opening hours, movable), or neither for an urgent job.
+        `slot_is_fixed` is worked out here, never taken from the client."""
+        day = attrs.pop("any_time_on", None)
+        if day is None:
+            if attrs.get("slot_start") is not None:
+                attrs["slot_is_fixed"] = True  # a time was given, so it is fixed again
+            return
+        if is_urgent:
+            raise serializers.ValidationError(
+                {"any_time_on": "An urgent job is planned from now, not for a day."}
+            )
+        if attrs.get("slot_start") is not None or attrs.get("slot_end") is not None:
+            raise serializers.ValidationError(
+                {"any_time_on": "Give a time window or any time that day, not both."}
+            )
+        try:
+            start, end = job_service.opening_window(organization, day)
+        except job_service.OpeningHoursMissing as exc:
+            raise serializers.ValidationError({"any_time_on": str(exc)}) from exc
+        attrs.update(slot_start=start, slot_end=end, slot_is_fixed=False)
+
+    @staticmethod
     def _scheduled_date(start, organization):
         """The day the job is for, on the organization's clock (an urgent job
         with no slot is for today there)."""
@@ -391,6 +417,11 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
         source="acceptable_skills",
         required=False,
     )
+    any_time_on = serializers.DateField(
+        write_only=True,
+        required=False,
+        help_text="A day the customer is free all day. Instead of slot_start and slot_end.",
+    )
 
     class Meta:
         model = Job
@@ -401,10 +432,12 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
             "customer_phone",
             "category",
             "is_urgent",
+            "priority",
             "address",
             "postal_code",
             "slot_start",
             "slot_end",
+            "any_time_on",
             "estimated_duration_minutes",
             "skill_ids",
         ]
@@ -416,6 +449,8 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
 
     def validate(self, attrs):
         is_urgent = attrs.get("is_urgent", False)
+        organization = self.context["request"].user.organization
+        self._resolve_window(attrs, organization=organization, is_urgent=is_urgent)
         start, end = attrs.get("slot_start"), attrs.get("slot_end")
         self._check_slot(start, end, is_urgent)
         skills = attrs.pop("acceptable_skills", None) or job_service.default_skills_for(
@@ -426,9 +461,7 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
                 {"skill_ids": "Select at least one skill."}
             )
         attrs["skills"] = skills
-        attrs["scheduled_date"] = self._scheduled_date(
-            start, self.context["request"].user.organization
-        )
+        attrs["scheduled_date"] = self._scheduled_date(start, organization)
         return attrs
 
     def create(self, validated_data):
@@ -452,6 +485,11 @@ class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
         allow_empty=False,
         error_messages={"empty": "Select at least one skill."},
     )
+    any_time_on = serializers.DateField(
+        write_only=True,
+        required=False,
+        help_text="A day the customer is free all day. Instead of slot_start and slot_end.",
+    )
 
     class Meta:
         model = Job
@@ -462,10 +500,12 @@ class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
             "customer_phone",
             "category",
             "is_urgent",
+            "priority",
             "address",
             "postal_code",
             "slot_start",
             "slot_end",
+            "any_time_on",
             "estimated_duration_minutes",
             "skill_ids",
             "version",
@@ -486,6 +526,7 @@ class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
             raise serializers.ValidationError({"version": "This field is required."})
         job = self.instance
         is_urgent = attrs.get("is_urgent", job.is_urgent)
+        self._resolve_window(attrs, organization=job.organization, is_urgent=is_urgent)
         start = attrs.get("slot_start", job.slot_start)
         end = attrs.get("slot_end", job.slot_end)
         self._check_slot(start, end, is_urgent)

@@ -14,6 +14,7 @@ from api.adapters import (
     technician_to_view,
 )
 from api.models import Job, JobStatus, Skill
+from dispatch_engine.types import Priority
 
 from .conftest import Role, make_user
 
@@ -94,6 +95,19 @@ def test_job_view_keeps_the_agreed_window(org, skill):
     )
     view = job_to_view(job)
     assert (view.slot_start, view.slot_end) == (job.slot_start, job.slot_end)
+
+
+def test_job_view_carries_priority_and_whether_the_slot_is_fixed(org, skill):
+    start = NOW + datetime.timedelta(hours=2)
+    window = {"slot_start": start, "slot_end": start + datetime.timedelta(hours=9)}
+    plain = job_to_view(make_job(org, skill, is_urgent=False, **window))
+    assert (plain.priority, plain.slot_is_fixed) == (Priority.NORMAL, True)
+    for stored, wanted in (("low", Priority.LOW), ("high", Priority.HIGH)):
+        job = make_job(
+            org, skill, is_urgent=False, priority=stored, slot_is_fixed=False, **window
+        )
+        view = job_to_view(job)
+        assert (view.priority, view.slot_is_fixed) == (wanted, False)
 
 
 def test_the_engine_never_sees_customer_details(org, skill):

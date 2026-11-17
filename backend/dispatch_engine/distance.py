@@ -21,6 +21,7 @@ DEFAULT_SPEED_MPH = 30.0
 ROAD_FACTOR = 1.3
 
 
+# plug and play incase of a better third party road-distance provider library
 class DistanceProvider(Protocol):
     """How far apart two places are, and how long the trip takes."""
 

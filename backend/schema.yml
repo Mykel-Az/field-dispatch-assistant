@@ -997,6 +997,10 @@ components:
         is_urgent:
           type: boolean
           readOnly: true
+        priority:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEnum'
+          readOnly: true
         status:
           allOf:
           - $ref: '#/components/schemas/JobStatusEnum'
@@ -1022,6 +1026,9 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        slot_is_fixed:
+          type: boolean
+          readOnly: true
         geocode_status:
           allOf:
           - $ref: '#/components/schemas/GeocodeStatusEnum'
@@ -1038,8 +1045,10 @@ components:
       - is_urgent
       - location_label
       - postal_code
+      - priority
       - scheduled_date
       - slot_end
+      - slot_is_fixed
       - slot_start
       - status
       - technician
@@ -1102,6 +1111,8 @@ components:
           $ref: '#/components/schemas/CategoryEnum'
         is_urgent:
           type: boolean
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
         address:
           type: string
           maxLength: 255
@@ -1116,6 +1127,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        any_time_on:
+          type: string
+          format: date
+          writeOnly: true
+          description: A day the customer is free all day. Instead of slot_start and
+            slot_end.
         estimated_duration_minutes:
           type: integer
           maximum: 1440
@@ -1156,6 +1173,10 @@ components:
         is_urgent:
           type: boolean
           readOnly: true
+        priority:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEnum'
+          readOnly: true
         status:
           allOf:
           - $ref: '#/components/schemas/JobStatusEnum'
@@ -1181,6 +1202,9 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        slot_is_fixed:
+          type: boolean
+          readOnly: true
         geocode_status:
           allOf:
           - $ref: '#/components/schemas/GeocodeStatusEnum'
@@ -1242,8 +1266,10 @@ components:
       - lng
       - location_label
       - postal_code
+      - priority
       - scheduled_date
       - slot_end
+      - slot_is_fixed
       - slot_start
       - status
       - technician
@@ -1554,6 +1580,8 @@ components:
           $ref: '#/components/schemas/CategoryEnum'
         is_urgent:
           type: boolean
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
         address:
           type: string
           maxLength: 255
@@ -1568,6 +1596,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        any_time_on:
+          type: string
+          format: date
+          writeOnly: true
+          description: A day the customer is free all day. Instead of slot_start and
+            slot_end.
         estimated_duration_minutes:
           type: integer
           maximum: 1440
@@ -1714,6 +1748,16 @@ components:
       - sla_label
       - slack_minutes
       - technician_id
+    PriorityEnum:
+      enum:
+      - low
+      - normal
+      - high
+      type: string
+      description: |-
+        * `low` - Low
+        * `normal` - Normal
+        * `high` - High
     Register:
       type: object
       properties:

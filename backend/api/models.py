@@ -229,6 +229,15 @@ class JobCategory(models.TextChoices):
     APPLIANCE = "appliance", "Appliance repair"
 
 
+class JobPriority(models.TextChoices):
+    """How early in the day the planner tries to place a job. It orders jobs in
+    ASSIGN; it does not pick the technician (ADR-020)."""
+
+    LOW = "low", "Low"
+    NORMAL = "normal", "Normal"
+    HIGH = "high", "High"
+
+
 class JobStatus(models.TextChoices):
     UNASSIGNED = lc.UNASSIGNED, "Unassigned"
     ASSIGNED = lc.ASSIGNED, "Assigned"
@@ -262,6 +271,9 @@ class Job(AddressMixin, TenantScopedModel):
     )
     category = models.CharField(max_length=20, choices=JobCategory.choices)
     is_urgent = models.BooleanField(default=False)
+    priority = models.CharField(
+        max_length=10, choices=JobPriority.choices, default=JobPriority.NORMAL
+    )
     status = models.CharField(
         max_length=20, choices=JobStatus.choices, default=JobStatus.UNASSIGNED
     )
@@ -276,6 +288,10 @@ class Job(AddressMixin, TenantScopedModel):
     scheduled_date = models.DateField(null=True, blank=True)
     slot_start = models.DateTimeField(null=True, blank=True)
     slot_end = models.DateTimeField(null=True, blank=True)
+    # False for "any time that day": the window is the opening hours, not a time
+    # the customer agreed to, so the planner may place the job anywhere inside it
+    # (ADR-021). Derived from how the job was entered, never typed by a client.
+    slot_is_fixed = models.BooleanField(default=True)
     sequence_position = models.PositiveSmallIntegerField(null=True, blank=True)
     estimated_arrival = models.DateTimeField(null=True, blank=True)
     arrived_at = models.DateTimeField(null=True, blank=True)
@@ -318,6 +334,10 @@ class Job(AddressMixin, TenantScopedModel):
             models.CheckConstraint(
                 condition=Q(slot_start__isnull=True) | Q(slot_end__gt=F("slot_start")),
                 name="slot_end_after_start",
+            ),
+            models.CheckConstraint(
+                condition=Q(slot_is_fixed=True) | Q(slot_start__isnull=False),
+                name="flexible_job_has_window",
             ),
             models.CheckConstraint(
                 condition=~Q(status__in=["assigned", "ongoing"])

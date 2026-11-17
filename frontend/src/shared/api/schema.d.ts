@@ -551,6 +551,7 @@ export interface components {
             readonly postal_code: string;
             readonly category: components["schemas"]["CategoryEnum"];
             readonly is_urgent: boolean;
+            readonly priority: components["schemas"]["PriorityEnum"];
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
             readonly technician: components["schemas"]["JobTechnician"] | null;
@@ -560,6 +561,7 @@ export interface components {
             readonly slot_start: string | null;
             /** Format: date-time */
             readonly slot_end: string | null;
+            readonly slot_is_fixed: boolean;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
         };
@@ -583,12 +585,18 @@ export interface components {
             customer_phone?: (string) | null;
             category: components["schemas"]["CategoryEnum"];
             is_urgent?: boolean;
+            priority?: components["schemas"]["PriorityEnum"];
             address: string;
             postal_code: string;
             /** Format: date-time */
             slot_start?: string | null;
             /** Format: date-time */
             slot_end?: string | null;
+            /**
+             * Format: date
+             * @description A day the customer is free all day. Instead of slot_start and slot_end.
+             */
+            any_time_on?: string;
             estimated_duration_minutes?: number;
             skill_ids?: number[];
         };
@@ -601,6 +609,7 @@ export interface components {
             readonly postal_code: string;
             readonly category: components["schemas"]["CategoryEnum"];
             readonly is_urgent: boolean;
+            readonly priority: components["schemas"]["PriorityEnum"];
             /** @default unassigned */
             readonly status: components["schemas"]["JobStatusEnum"];
             readonly technician: components["schemas"]["JobTechnician"] | null;
@@ -610,6 +619,7 @@ export interface components {
             readonly slot_start: string | null;
             /** Format: date-time */
             readonly slot_end: string | null;
+            readonly slot_is_fixed: boolean;
             readonly geocode_status: components["schemas"]["GeocodeStatusEnum"];
             readonly location_label: string;
             readonly description: string;
@@ -743,12 +753,18 @@ export interface components {
             customer_phone?: (string) | null;
             category?: components["schemas"]["CategoryEnum"];
             is_urgent?: boolean;
+            priority?: components["schemas"]["PriorityEnum"];
             address?: string;
             postal_code?: string;
             /** Format: date-time */
             slot_start?: string | null;
             /** Format: date-time */
             slot_end?: string | null;
+            /**
+             * Format: date
+             * @description A day the customer is free all day. Instead of slot_start and slot_end.
+             */
+            any_time_on?: string;
             estimated_duration_minutes?: number;
             skill_ids?: number[];
             version?: number;
@@ -805,6 +821,13 @@ export interface components {
             reasons: components["schemas"]["PlanReason"][];
             sentence: string;
         };
+        /**
+         * @description * `low` - Low
+         *     * `normal` - Normal
+         *     * `high` - High
+         * @enum {string}
+         */
+        PriorityEnum: "low" | "normal" | "high";
         Register: {
             organization_name: string;
             /** Format: email */

@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from dispatch_engine.distance import DEFAULT_SPEED_MPH
 from dispatch_engine.types import JobView, Location, OrgConfig, Priority, TechView
 
-from .models import Job, JobStatus, Organization, Technician
+from .models import Job, JobPriority, JobStatus, Organization, Technician
 
 # TIME shortcut: these two belong on Organization too, so each business can tune
 # them. Until then every organization shares the same values. (The daily job
@@ -57,6 +57,13 @@ def org_to_config(organization: Organization) -> OrgConfig:
     )
 
 
+_PRIORITY = {
+    JobPriority.LOW: Priority.LOW,
+    JobPriority.NORMAL: Priority.NORMAL,
+    JobPriority.HIGH: Priority.HIGH,
+}
+
+
 def job_to_view(job: Job, *, urgent_clock_start: datetime | None = None) -> JobView:
     """A job as the engine sees it.
 
@@ -83,10 +90,8 @@ def job_to_view(job: Job, *, urgent_clock_start: datetime | None = None) -> JobV
         slot_end=job.slot_end,
         duration_minutes=job.estimated_duration_minutes,
         acceptable_skill_ids=frozenset(s.pk for s in job.acceptable_skills.all()),
-        # Stage 1 (ADR-020/021) adds Job.priority and Job.slot_is_fixed; until
-        # then every job is normal priority with a fixed window.
-        priority=Priority.NORMAL,
-        slot_is_fixed=True,
+        priority=_PRIORITY[job.priority],
+        slot_is_fixed=job.slot_is_fixed,
     )
 
 

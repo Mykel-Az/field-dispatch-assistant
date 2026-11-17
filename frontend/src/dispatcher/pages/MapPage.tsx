@@ -8,9 +8,11 @@ import StatusPin from '../../shared/components/StatusPin';
 import { NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
 import { formatSlot, placeLine } from '../../shared/jobTime';
 import JobsMap from '../../shared/map/JobsMap';
+import { useOffice } from '../../shared/map/useOffice';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import { usePolling } from '../../shared/usePolling';
+import { FROM_MAP } from '../../shared/useBack';
 import { ui } from '../../shared/ui';
 
 const clock = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -30,6 +32,7 @@ export default function MapPage() {
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [detailError, setDetailError] = useState(false);
   const latest = useRef(0);
+  const office = useOffice();
 
   const refresh = useCallback(async () => {
     const mine = ++latest.current; // a slow older answer must not overwrite a newer one
@@ -107,13 +110,14 @@ export default function MapPage() {
         <p className={`${ui.notice} mb-3`}>Too many jobs to show at once. Narrow it down with the filters.</p>
       )}
 
-      {loaded && pins.length === 0 && !failed ? (
-        <div className={`${ui.card} text-center text-ink-muted`}>
+      {loaded && pins.length === 0 && !failed && (
+        <div className={`${ui.card} mb-3 text-center text-ink-muted`}>
           No located jobs{params.toString() ? ' for these filters' : ''}.{' '}
           <Link to="/jobs/new" className="text-brand hover:underline">Create a job</Link>
         </div>
-      ) : (
-        <JobsMap pins={pins} selectedId={selectedId} onSelect={setSelectedId} />
+      )}
+      {(pins.length > 0 || office || !loaded || failed) && (
+        <JobsMap pins={pins} selectedId={selectedId} onSelect={setSelectedId} office={office} />
       )}
 
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted" aria-label="Pin colours">
@@ -122,6 +126,11 @@ export default function MapPage() {
             <StatusPin status={s} size={18} /> {STATUS_META[s].label} ({n})
           </li>
         ))}
+        {office && (
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="inline-block size-4 rounded bg-ink" /> Office
+          </li>
+        )}
       </ul>
 
       {selectedId !== null && (
@@ -146,7 +155,7 @@ export default function MapPage() {
                   {shown.technician?.full_name ?? 'Not assigned'}
                 </p>
               </div>
-              <Link to={`/jobs/${shown.id}`} className={ui.btn + ' inline-flex items-center'}>Open job</Link>
+              <Link to={`/jobs/${shown.id}`} state={FROM_MAP} className={ui.btn + ' inline-flex items-center'}>Open job</Link>
             </div>
           )}
         </div>

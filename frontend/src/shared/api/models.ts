@@ -57,7 +57,9 @@ export interface Organization {
   timezone: string;
   work_start: string | null; // "HH:MM:SS"
   work_end: string | null;
-  scoring_strategy: string;
+  scoring_strategy: 'balanced' | 'nearest';
+  /** Most jobs the planner gives one technician in a day (urgent jobs may go over). 1-10. */
+  max_jobs_per_tech_per_day: number;
   is_configured: boolean;
   version: number;
 }

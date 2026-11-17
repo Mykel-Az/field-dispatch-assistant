@@ -11,6 +11,7 @@ import { formatSlot, placeLine } from '../../shared/jobTime';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
 import { usePolling } from '../../shared/usePolling';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
+import { FROM_JOBS } from '../../shared/useBack';
 import { ui } from '../../shared/ui';
 
 const PAGE_SIZE = 50;
@@ -35,6 +36,7 @@ function JobCard({ job }: { job: JobRow }) {
     <li>
       <Link
         to={`/jobs/${job.id}`}
+        state={FROM_JOBS}
         className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-card bg-surface p-4 pl-5 shadow-sm ring-1 ring-line hover:ring-line-strong focus-visible:outline-2 focus-visible:outline-brand lg:grid lg:grid-cols-[0.375rem_minmax(0,2fr)_minmax(0,2fr)_11rem_8.5rem]"
       >
         <span aria-hidden="true" className={`w-1.5 self-stretch rounded-full ${meta?.bar ?? 'bg-line'}`} />
