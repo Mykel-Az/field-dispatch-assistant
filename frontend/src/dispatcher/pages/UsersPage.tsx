@@ -7,6 +7,14 @@ import {
   reactivateUser,
 } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
+import {
+  HeadCell,
+  StackedBody,
+  StackedCell,
+  StackedHead,
+  StackedRow,
+  StackedTable,
+} from '../../shared/components/StackedTable';
 import { ui } from '../../shared/ui';
 import { ROLE_LABEL, type CreateUserInput, type Role, type User } from '../../shared/api/models';
 
@@ -103,26 +111,32 @@ export default function UsersPage() {
       {loadError && <p role="alert" className={`${ui.error} mt-3`}>{loadError}</p>}
       {actionError && <p role="alert" className={`${ui.error} mt-3`}>{actionError}</p>}
 
-      <table className="my-4 w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="border-b border-line text-ink-muted"><th className="p-2">Name</th><th className="p-2">Email</th><th className="p-2">Role</th><th className="p-2">Status</th><th /></tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} className={`border-b border-line ${u.is_active ? '' : 'text-ink-muted'}`}>
-              <td className="p-2">{u.full_name}</td>
-              <td className="p-2">{u.email}</td>
-              <td className="p-2">{ROLE_LABEL[u.role]}</td>
-              <td className="p-2">{u.is_active ? 'Active' : 'Deactivated'}</td>
-              <td className="p-2 text-right">
-                {u.id !== me?.id && (
-                  <button className={ui.btnSmall} onClick={() => toggle(u)}>{u.is_active ? 'Deactivate' : 'Reactivate'}</button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="my-4">
+        <StackedTable label="Team">
+          <StackedHead>
+            <HeadCell>Name</HeadCell>
+            <HeadCell>Email</HeadCell>
+            <HeadCell>Role</HeadCell>
+            <HeadCell>Status</HeadCell>
+            <HeadCell />
+          </StackedHead>
+          <StackedBody>
+            {users.map((u) => (
+              <StackedRow key={u.id} muted={!u.is_active}>
+                <StackedCell label="Name">{u.full_name}</StackedCell>
+                <StackedCell label="Email"><span className="break-all">{u.email}</span></StackedCell>
+                <StackedCell label="Role">{ROLE_LABEL[u.role]}</StackedCell>
+                <StackedCell label="Status">{u.is_active ? 'Active' : 'Deactivated'}</StackedCell>
+                <StackedCell actions>
+                  {u.id !== me?.id && (
+                    <button className={ui.btnSmall} onClick={() => toggle(u)}>{u.is_active ? 'Deactivate' : 'Reactivate'}</button>
+                  )}
+                </StackedCell>
+              </StackedRow>
+            ))}
+          </StackedBody>
+        </StackedTable>
+      </div>
       {/* TIME: first page only (50). Full-fidelity: next/previous paging. */}
       {count > users.length && <p className={ui.muted}>Showing {users.length} of {count}.</p>}
 
