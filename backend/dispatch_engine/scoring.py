@@ -128,7 +128,13 @@ def score_candidates(
     technicians: Iterable[TechView],
     config: OrgConfig,
 ) -> tuple[Scored, ...]:
-    """Score every candidate and return them best first (lowest cost, then lowest id)."""
+    """Score every candidate and return them best first.
+
+    A technician who would miss the job's window (a breach, which is what an
+    overlap with their earlier job looks like) comes after every technician who would
+    not, whatever the costs: nobody is sent late while someone else can be on time
+    (ADR-023). Among the rest, lowest cost first, then lowest id.
+    """
     strategy = get_strategy(config.scoring_strategy)
     by_id = {t.id: t for t in technicians}
 
@@ -154,4 +160,9 @@ def score_candidates(
                 cost=cost,
             )
         )
-    return tuple(sorted(scored, key=lambda s: (s.cost, s.technician_id)))
+    return tuple(
+        sorted(
+            scored,
+            key=lambda s: (s.sla_label == SlaLabel.BREACH, s.cost, s.technician_id),
+        )
+    )

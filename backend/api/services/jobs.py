@@ -3,13 +3,21 @@
 import datetime
 from zoneinfo import ZoneInfo
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from dispatch_engine import lifecycle as lc
 
 from ..exceptions import Conflict
-from ..models import GeocodeStatus, Job, JobStatus, JobStatusHistory, Skill
+from ..models import (
+    GeocodeStatus,
+    Job,
+    JobStatus,
+    JobStatusHistory,
+    Skill,
+    Technician,
+)
 from ..versioning import check_and_bump_version
 from .locations import locate
 
@@ -30,6 +38,16 @@ class ReasonRequired(JobError):
 
 class JobNotEditable(JobError):
     code = "job_not_editable"
+
+
+class AnotherJobOngoing(JobError):
+    code = "another_job_ongoing"  # invariant 3: one Ongoing job per technician
+
+
+class NotYourJob(JobError):
+    """The job is not this technician's (the API answers 404, never "forbidden")."""
+
+    code = "not_found"
 
 
 class LocationRequired(JobError):
@@ -294,3 +312,87 @@ def release_assigned_jobs(technician, actor):
     for job in jobs:
         transition(job, lc.UNASSIGNED, actor, "technician deactivated")
     return len(jobs)
+
+
+# ---- the technician's three actions (S2-7) -----------------------------------
+# Each one is safe to repeat: a second tap, a retry after a dropped connection or two
+# open tabs answer 200 with the job as it now is, instead of an error. They lock the
+# technician's row first, then the job's, so two requests for the same technician take
+# turns (a second Arrive cannot slip in beside the first); the database's one-Ongoing-
+# job constraint is the backstop. Reasons for a wrong state: IllegalJobTransition.
+
+
+def _lock(job, technician):
+    Technician.objects.select_for_update().get(pk=technician.pk)
+    return Job.objects.select_for_update().get(pk=job.pk)
+
+
+def _owns(job, technician):
+    return job.technician_id == technician.pk
+
+
+def arrive_job(*, job, technician, actor):
+    """Assigned -> Ongoing. Already Ongoing: nothing to do. Another Ongoing job: refused."""
+    try:
+        with transaction.atomic():
+            locked = _lock(job, technician)
+            if not _owns(locked, technician):
+                raise NotYourJob
+            if locked.status == JobStatus.ONGOING:
+                return locked
+            if (
+                Job.objects.filter(technician=technician, status=JobStatus.ONGOING)
+                .exclude(pk=locked.pk)
+                .exists()
+            ):
+                raise AnotherJobOngoing("Finish your current job first.")
+            return transition(locked, lc.ONGOING, actor)
+    except IntegrityError:  # the constraint caught what the check could not
+        raise AnotherJobOngoing("Finish your current job first.") from None
+
+
+def complete_job(*, job, technician, actor):
+    """Ongoing -> Completed. Already Completed: nothing to do."""
+    with transaction.atomic():
+        locked = _lock(job, technician)
+        if not _owns(locked, technician):
+            raise NotYourJob
+        if locked.status == JobStatus.COMPLETED:
+            return locked
+        return transition(locked, lc.COMPLETED, actor)
+
+
+def _returned_by(job, technician):
+    """True when this technician already marked the job incomplete and it went back
+    to the queue and nothing has happened to it since (the repeat of a finished action)."""
+    last_two = list(job.history.order_by("-id")[:2])
+    return (
+        job.status == JobStatus.UNASSIGNED
+        and len(last_two) == 2
+        and last_two[0].from_status == lc.INCOMPLETE
+        and last_two[0].to_status == lc.UNASSIGNED
+        and last_two[1].to_status == lc.INCOMPLETE
+        and last_two[1].technician_id == technician.pk
+    )
+
+
+def incomplete_job(*, job, technician, actor, reason):
+    """Ongoing -> Incomplete (with a reason) and straight back to the queue.
+
+    Two history rows, so the story reads: could not finish (why), then back in the
+    queue. Repeating it once the job is back in the queue answers with that job.
+    """
+    with transaction.atomic():
+        locked = _lock(job, technician)
+        if not _owns(locked, technician):
+            if _returned_by(locked, technician):
+                return locked
+            raise NotYourJob
+        marked = transition(locked, lc.INCOMPLETE, actor, reason)
+        Job.objects.filter(pk=marked.pk).update(attempt_count=F("attempt_count") + 1)
+        return transition(
+            marked,
+            lc.UNASSIGNED,
+            actor,
+            "Returned to the queue: the job was not finished.",
+        )

@@ -8,7 +8,7 @@ import pytest
 
 from api.models import Technician
 
-from .conftest import api_endpoints, client_for, make_job
+from .conftest import Role, api_endpoints, client_for, make_job, make_user
 
 # path template -> function(org_a_user) returning an id owned by organization A
 OBJECT_ID_FOR = {
@@ -25,6 +25,15 @@ OBJECT_ID_FOR = {
     "/api/jobs/{pk}/unassign/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/location/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/retry-geocode/": lambda owner: make_job(owner.organization).pk,
+    "/api/technician/me/jobs/{pk}/arrive/": lambda owner: (
+        make_job(owner.organization).pk
+    ),
+    "/api/technician/me/jobs/{pk}/complete/": lambda owner: (
+        make_job(owner.organization).pk
+    ),
+    "/api/technician/me/jobs/{pk}/incomplete/": lambda owner: (
+        make_job(owner.organization).pk
+    ),
 }
 UNSAFE_BODY = {"full_name": "x", "new_password": "An0ther-long-phrase!"}
 
@@ -44,10 +53,16 @@ def test_every_id_endpoint_is_registered_for_the_isolation_test():
 
 
 @pytest.mark.parametrize(("method", "path"), endpoints_with_an_id())
-def test_other_organization_gets_404(method, path, dispatcher_a, technician_a, head_b):
+def test_other_organization_gets_404(
+    method, path, dispatcher_a, technician_a, head_b, org_b
+):
     object_id = OBJECT_ID_FOR[path](dispatcher_a)
-    # Head B has the right ROLE, so only tenancy can be the reason for the 404.
-    response = getattr(client_for(head_b), method.lower())(
+    # The caller has the right ROLE for the endpoint (a technician for the technician
+    # endpoints, a head for the rest), so only tenancy can be the reason for the 404.
+    caller = head_b
+    if path.startswith("/api/technician/"):
+        caller = make_user(org_b, Role.TECHNICIAN, "tech-b@example.com")
+    response = getattr(client_for(caller), method.lower())(
         path.format(pk=object_id), UNSAFE_BODY, format="json"
     )
     assert response.status_code == 404

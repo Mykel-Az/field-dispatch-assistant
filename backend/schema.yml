@@ -648,6 +648,112 @@ paths:
                 items:
                   $ref: '#/components/schemas/Skill'
           description: ''
+  /api/technician/me/jobs/:
+    get:
+      operationId: technician_me_jobs_list
+      description: |-
+        GET /technician/me/jobs/?date=: the signed-in technician's own jobs for a day,
+        in the order they will be visited. Nobody else's job can appear here.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+      tags:
+      - technician
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TechnicianJob'
+          description: ''
+  /api/technician/me/jobs/{id}/arrive/:
+    post:
+      operationId: technician_me_jobs_arrive_create
+      description: |-
+        POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+        it is now), a job in the wrong state 409, and a job that is not theirs 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - technician
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianJob'
+          description: ''
+  /api/technician/me/jobs/{id}/complete/:
+    post:
+      operationId: technician_me_jobs_complete_create
+      description: |-
+        POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+        it is now), a job in the wrong state 409, and a job that is not theirs 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - technician
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianJob'
+          description: ''
+  /api/technician/me/jobs/{id}/incomplete/:
+    post:
+      operationId: technician_me_jobs_incomplete_create
+      description: |-
+        POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+        it is now), a job in the wrong state 409, and a job that is not theirs 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - technician
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TechnicianIncomplete'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TechnicianIncomplete'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TechnicianIncomplete'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianJob'
+          description: ''
   /api/technicians/:
     get:
       operationId: technicians_list
@@ -1945,6 +2051,14 @@ components:
       - shift_start
       - skills
       - user
+    TechnicianIncomplete:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+      required:
+      - reason
     TechnicianInput:
       type: object
       properties:
@@ -1962,6 +2076,122 @@ components:
       - shift_end
       - shift_start
       - skill_ids
+    TechnicianJob:
+      type: object
+      description: |-
+        What a technician sees of their own job: what they need in the field, and
+        nothing the office uses to run the plan (no history, version or explanation).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        customer_name:
+          type: string
+          readOnly: true
+        customer_phone:
+          type: string
+          readOnly: true
+          nullable: true
+        address:
+          type: string
+          readOnly: true
+        postal_code:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryEnum'
+          readOnly: true
+        is_urgent:
+          type: boolean
+          readOnly: true
+        priority:
+          allOf:
+          - $ref: '#/components/schemas/PriorityEnum'
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/JobStatusEnum'
+          readOnly: true
+        scheduled_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        slot_start:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        slot_end:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        slot_is_fixed:
+          type: boolean
+          readOnly: true
+        estimated_arrival:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        estimated_duration_minutes:
+          type: integer
+          readOnly: true
+        sequence_position:
+          type: integer
+          readOnly: true
+          nullable: true
+        lat:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        lng:
+          type: number
+          format: double
+          readOnly: true
+          nullable: true
+        arrived_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - address
+      - arrived_at
+      - category
+      - completed_at
+      - customer_name
+      - customer_phone
+      - description
+      - estimated_arrival
+      - estimated_duration_minutes
+      - id
+      - is_urgent
+      - lat
+      - lng
+      - postal_code
+      - priority
+      - scheduled_date
+      - sequence_position
+      - slot_end
+      - slot_is_fixed
+      - slot_start
+      - status
+      - title
     TimezoneEnum:
       enum:
       - America/New_York

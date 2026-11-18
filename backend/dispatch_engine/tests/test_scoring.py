@@ -203,4 +203,39 @@ def test_same_inputs_give_the_same_ranking_in_any_input_order(pool, strategy, rn
     rnd.shuffle(shuffled)
     assert score_candidates(job, shuffled, techs, config) == first
     assert score_candidates(job, candidates, techs, config) == first
-    assert list(first) == sorted(first, key=lambda s: (s.cost, s.technician_id))
+    assert list(first) == sorted(
+        first, key=lambda s: (s.sla_label == SlaLabel.BREACH, s.cost, s.technician_id)
+    )
+
+
+def test_a_technician_who_would_be_late_ranks_after_one_who_would_not_whatever_the_cost():
+    job = make_job(slot_start=NOW, slot_end=NOW + timedelta(hours=1))
+    on_time = make_candidate(
+        technician_id=2,
+        travel_minutes=40,
+        estimated_arrival=NOW + timedelta(minutes=40),
+    )
+    late = make_candidate(
+        technician_id=1, travel_minutes=0, estimated_arrival=NOW + timedelta(minutes=90)
+    )
+    techs = [make_tech(id=1), make_tech(id=2, assigned_count=3)]
+    ranked = score_candidates(job, [late, on_time], techs, make_config())
+    assert [s.technician_id for s in ranked] == [2, 1]
+    assert ranked[0].cost > ranked[1].cost  # the late one is cheaper on paper
+    assert ranked[1].sla_label == SlaLabel.BREACH
+
+
+def test_when_everyone_would_be_late_the_cheapest_still_wins():
+    job = make_job(slot_start=NOW, slot_end=NOW + timedelta(hours=1))
+    a = make_candidate(
+        technician_id=1,
+        travel_minutes=30,
+        estimated_arrival=NOW + timedelta(minutes=90),
+    )
+    b = make_candidate(
+        technician_id=2, travel_minutes=0, estimated_arrival=NOW + timedelta(minutes=70)
+    )
+    ranked = score_candidates(
+        job, [a, b], [make_tech(id=1), make_tech(id=2)], make_config()
+    )
+    assert [s.technician_id for s in ranked] == [2, 1]

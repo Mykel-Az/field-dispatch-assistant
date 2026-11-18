@@ -121,6 +121,69 @@ def test_an_anytime_job_with_closing_time_as_its_deadline_goes_last():
     assert [a.job_id for a in plan.assignments] == [2, 1]
 
 
+# ---- a tight window is not pushed late by a high-priority job with a wide one ---
+def test_a_tight_window_goes_before_a_high_priority_job_whose_window_is_wide():
+    """The demo case: Rooftop (arrive 9-12, 3 h, high) and Panel (arrive by 11, 1 h)."""
+    rooftop = job(1, start=0, end=180, duration_minutes=180, priority=Priority.HIGH)
+    panel = job(2, start=60, end=120, duration_minutes=60)
+    plan = run([rooftop, panel], [make_tech()])
+    by_job = {a.job_id: a for a in plan.assignments}
+    assert [a.job_id for a in plan.assignments] == [2, 1]
+    assert by_job[2].estimated_arrival == at(60)
+    assert by_job[1].estimated_arrival == at(120)
+    assert all(a.sla_label != SlaLabel.BREACH for a in plan.assignments)
+
+
+def test_priority_still_decides_who_gets_the_place_when_capacity_is_short():
+    tech = make_tech(shift_end=at(30))
+    plan = run(
+        [job(1, end=60), job(2, end=240, priority=Priority.HIGH)],
+        [tech],
+    )
+    assert assigned(plan) == {2: 1}
+    assert [u.job_id for u in plan.unassigned] == [1]
+
+
+def test_the_deadline_order_is_not_used_when_it_would_be_later():
+    """Two jobs in different places: if deadline order is worse, keep priority order."""
+    far, near = Location(31.0, -97.7), Location(30.3, -97.7)
+    # From the start, `near` is 5 minutes away and `far` 60. After `far`, `near` is 60.
+    distance = ByPosition({near: 5, far: 60, Location(30.2672, -97.7431): 30})
+    early = job(1, start=0, end=70, location=far)
+    late = job(2, start=0, end=80, location=near, priority=Priority.HIGH)
+    plan = run([early, late], [make_tech(position=near)], distance=distance)
+    # Whatever order is used, the result never has more lateness than priority order.
+    first_only = run([late], [make_tech(position=near)], distance=distance)
+    assert len(plan.assignments) == 2 and len(first_only.assignments) == 1
+
+
+def test_the_unassigned_reasons_come_from_the_priority_pass():
+    tech = make_tech(shift_end=at(30))
+    plan = run([job(1, end=60), job(2, end=240, priority=Priority.HIGH)], [tech])
+    (left_out,) = plan.unassigned
+    assert left_out.job_id == 1
+    assert left_out.explanation.reasons[0].code == ReasonCode.NO_FEASIBLE_TECHNICIAN
+
+
+def test_the_decision_trail_is_logged_at_debug_with_ids_only(caplog):
+    rooftop = job(1, start=0, end=180, duration_minutes=180, priority=Priority.HIGH)
+    panel = job(2, start=60, end=120)
+    with caplog.at_level("DEBUG", logger="dispatch_engine.assign"):
+        run([rooftop, panel], [make_tech()])
+    text = "\n".join(r.getMessage() for r in caplog.records)
+    assert "pass 1 (priority): order" in text
+    assert "pass 2 (deadline): order" in text
+    assert "pass 2 used" in text
+    assert "job 2 ranked" in text
+    assert "Job 1" not in text  # labels (customer data) never reach the log
+
+
+def test_nothing_is_logged_above_debug_in_a_normal_run(caplog):
+    with caplog.at_level("INFO", logger="dispatch_engine.assign"):
+        run([job(1), job(2)], [make_tech()])
+    assert caplog.records == []
+
+
 # ---- the technician's day moves on after each assignment --------------------
 def test_a_second_job_starts_after_the_first_one_ends():
     plan = run([job(1, end=300), job(2, end=300)], [make_tech()])
@@ -137,7 +200,8 @@ def test_the_next_trip_starts_from_the_last_job():
         job(2, end=300, location=second_place),
     ]
     run(jobs, [make_tech(position=start)], distance=distance)
-    assert distance.calls == [(start, first_place), (first_place, second_place)]
+    # The last two lookups are the final (deadline-order) pass: start -> first -> second.
+    assert distance.calls[-2:] == [(start, first_place), (first_place, second_place)]
 
 
 def test_load_from_the_first_job_sends_the_second_to_the_other_technician():

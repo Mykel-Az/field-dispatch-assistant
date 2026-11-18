@@ -379,6 +379,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/technician/me/jobs/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /technician/me/jobs/?date=: the signed-in technician's own jobs for a day,
+         *     in the order they will be visited. Nobody else's job can appear here.
+         */
+        get: operations["technician_me_jobs_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/technician/me/jobs/{id}/arrive/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+         *     it is now), a job in the wrong state 409, and a job that is not theirs 404.
+         */
+        post: operations["technician_me_jobs_arrive_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/technician/me/jobs/{id}/complete/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+         *     it is now), a job in the wrong state 409, and a job that is not theirs 404.
+         */
+        post: operations["technician_me_jobs_complete_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/technician/me/jobs/{id}/incomplete/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+         *     it is now), a job in the wrong state 409, and a job that is not theirs 404.
+         */
+        post: operations["technician_me_jobs_incomplete_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/technicians/": {
         parameters: {
             query?: never;
@@ -903,12 +983,51 @@ export interface components {
             readonly shift_end: string;
             readonly phone: string | null;
         };
+        TechnicianIncomplete: {
+            reason: string;
+        };
         TechnicianInput: {
             skill_ids: number[];
             /** Format: time */
             shift_start: string;
             /** Format: time */
             shift_end: string;
+        };
+        /**
+         * @description What a technician sees of their own job: what they need in the field, and
+         *     nothing the office uses to run the plan (no history, version or explanation).
+         */
+        TechnicianJob: {
+            readonly id: number;
+            readonly title: string;
+            readonly customer_name: string;
+            readonly customer_phone: string | null;
+            readonly address: string;
+            readonly postal_code: string;
+            readonly description: string;
+            readonly category: components["schemas"]["CategoryEnum"];
+            readonly is_urgent: boolean;
+            readonly priority: components["schemas"]["PriorityEnum"];
+            readonly status: components["schemas"]["JobStatusEnum"];
+            /** Format: date */
+            readonly scheduled_date: string | null;
+            /** Format: date-time */
+            readonly slot_start: string | null;
+            /** Format: date-time */
+            readonly slot_end: string | null;
+            readonly slot_is_fixed: boolean;
+            /** Format: date-time */
+            readonly estimated_arrival: string | null;
+            readonly estimated_duration_minutes: number;
+            readonly sequence_position: number | null;
+            /** Format: double */
+            readonly lat: number | null;
+            /** Format: double */
+            readonly lng: number | null;
+            /** Format: date-time */
+            readonly arrived_at: string | null;
+            /** Format: date-time */
+            readonly completed_at: string | null;
         };
         /**
          * @description * `America/New_York` - Eastern
@@ -1492,6 +1611,96 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Skill"][];
+                };
+            };
+        };
+    };
+    technician_me_jobs_list: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianJob"][];
+                };
+            };
+        };
+    };
+    technician_me_jobs_arrive_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianJob"];
+                };
+            };
+        };
+    };
+    technician_me_jobs_complete_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianJob"];
+                };
+            };
+        };
+    };
+    technician_me_jobs_incomplete_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TechnicianIncomplete"];
+                "application/x-www-form-urlencoded": components["schemas"]["TechnicianIncomplete"];
+                "multipart/form-data": components["schemas"]["TechnicianIncomplete"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TechnicianJob"];
                 };
             };
         };
