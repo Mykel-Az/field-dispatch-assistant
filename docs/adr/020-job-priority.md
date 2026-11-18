@@ -21,6 +21,9 @@ take stays unassigned, with the reason.
 Priority can be edited at any status. It is not a plan field: changing it on an
 assigned job does not move that stop.
 
+Amended by ADR-023: this order decides who gets a place. The jobs that get one are
+then planned in deadline order, so priority never makes a tight window late.
+
 ## Alternatives considered
 - **A number (1-10)**: false precision; nobody can say what a 6 means.
 - **Priority as a score weight**: mixes "who goes first" with "who is best for

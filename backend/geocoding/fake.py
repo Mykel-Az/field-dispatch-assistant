@@ -24,8 +24,12 @@ class FakeGeocoder:
         if "unfindable" in text or not (address.strip() or postal_code.strip()):
             return None
         digest = hashlib.sha256(f"{address}|{postal_code}".encode()).digest()
-        lat = 30.0 + int.from_bytes(digest[:4], "big") / 2**32  # 30.0 .. 31.0
-        lng = -98.0 + int.from_bytes(digest[4:8], "big") / 2**32  # -98.0 .. -97.0
+        # A box about 14 miles across around central Austin, like one city's service
+        # area: a wider box made demo jobs hours apart and every plan look late.
+        lat = 30.20 + 0.20 * int.from_bytes(digest[:4], "big") / 2**32  # 30.20 .. 30.40
+        lng = (
+            -97.85 + 0.20 * int.from_bytes(digest[4:8], "big") / 2**32
+        )  # -97.85 .. -97.65
         status = OK if address.strip() else APPROXIMATE
         label = ", ".join(
             part for part in (address.strip(), postal_code.strip()) if part

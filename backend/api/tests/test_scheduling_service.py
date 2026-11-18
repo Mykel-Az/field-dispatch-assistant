@@ -427,3 +427,95 @@ def test_an_any_time_job_is_planned_inside_the_opening_hours(org, dispatcher_a, 
     assert [p.job_id for p in result.assigned] == [j.pk]
     arrival = fresh(j).estimated_arrival
     assert NOW <= arrival <= at(23)  # not before "now" (9:00 local), not after closing
+
+
+# ---- the decision trail ------------------------------------------------------
+def test_a_run_logs_one_summary_line_at_info(caplog, org, dispatcher_a, tech):
+    job(org, title="Fix AC").acceptable_skills.add(Skill.objects.get(name="HVAC"))
+    with caplog.at_level("INFO", logger="api.services.scheduling"):
+        run(org, dispatcher_a)
+    (record,) = [r for r in caplog.records if r.name == "api.services.scheduling"]
+    message = record.getMessage()
+    assert "1 assigned" in message and "0 unassigned" in message
+    assert "Fix AC" not in message  # titles are customer data
+
+
+def test_plan_trace_prints_the_decisions_and_saves_nothing(
+    monkeypatch, org, dispatcher_a, tech
+):
+    monkeypatch.setattr(scheduling, "SystemClock", lambda: CLOCK)
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    made = job(org, title="Fix AC")
+    made.acceptable_skills.add(Skill.objects.get(name="HVAC"))
+    out = StringIO()
+    call_command(
+        "plan_trace", email=dispatcher_a.email, date=DAY.isoformat(), stdout=out
+    )
+    text = out.getvalue()
+    assert "pass 1 (priority)" in text and "ranked" in text
+    assert "Fix AC" in text and "Dry run: nothing was saved." in text
+    made.refresh_from_db()
+    assert made.status == JobStatus.UNASSIGNED and made.technician_id is None
+    assert not JobStatusHistory.objects.filter(job=made, source="planner").exists()
+
+
+# ---- overlapping fixed windows (ADR-023) ----------------------------------------
+def _second_tech(org, hvac):
+    user = make_user(org, Role.TECHNICIAN, "tech-2@example.com")
+    technician = technician_of(user)
+    technician.skills.add(hvac)
+    return technician
+
+
+def _overlapping_jobs(org, hvac):
+    long_job = job(org, title="Rooftop", estimated_duration_minutes=180)
+    short_job = job(
+        org,
+        title="Panel",
+        slot_start=at(18, 30),
+        slot_end=at(19),
+        estimated_duration_minutes=60,
+        priority="normal",
+    )
+    for made in (long_job, short_job):
+        made.acceptable_skills.add(hvac)
+    return long_job, short_job
+
+
+def test_overlapping_fixed_jobs_go_to_different_technicians_when_there_are_two(
+    org, dispatcher_a, tech, hvac
+):
+    other = _second_tech(org, hvac)
+    long_job, short_job = _overlapping_jobs(org, hvac)
+    result = run(org, dispatcher_a)
+    by_job = {p.job_id: p for p in result.assigned}
+    assert by_job[long_job.pk].technician_id != by_job[short_job.pk].technician_id
+    assert {p.technician_id for p in result.assigned} == {tech.pk, other.pk}
+    assert all(p.sla_label != "breach" for p in result.assigned)
+
+
+def test_with_one_technician_wide_windows_are_fitted_one_after_the_other(
+    org, dispatcher_a, tech, hvac
+):
+    _overlapping_jobs(org, hvac)  # Panel arrive by 13:00, Rooftop by 14:00
+    result = run(org, dispatcher_a)
+    assert [p.sla_label for p in result.assigned] == ["ok", "ok"]
+    first, second = sorted(result.assigned, key=lambda p: p.estimated_arrival)
+    assert first.estimated_arrival < second.estimated_arrival
+
+
+def test_with_one_technician_two_tight_windows_leave_one_late_but_flagged(
+    org, dispatcher_a, tech, hvac
+):
+    for title in ("One", "Two"):
+        made = job(
+            org, title=title, slot_start=at(18), slot_end=at(18, 30),
+            estimated_duration_minutes=120,
+        )  # fmt: skip
+        made.acceptable_skills.add(hvac)
+    result = run(org, dispatcher_a)
+    assert len(result.assigned) == 2 and not result.unassigned
+    assert "breach" in {p.sla_label for p in result.assigned}  # shown, never hidden

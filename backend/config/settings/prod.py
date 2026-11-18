@@ -58,6 +58,7 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
     "loggers": {
+        **PLANNER_LOGGERS,
         "django.request": {
             "handlers": ["console"],
             "level": "ERROR",

@@ -95,6 +95,16 @@ that is why; wait for the screen to clear.
 | `ALLOWED_HOSTS` | Comma-separated hostnames, no scheme |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated origins, with scheme |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated origins, with scheme |
+| `PLANNER_LOG_LEVEL` | Optional. `INFO` (default) logs one line per planner run; `DEBUG` logs every decision (ids only) |
+
+### Watching the planner decide
+
+```bash
+python manage.py plan_trace --email dispatcher@demo.example --date 2026-11-20
+```
+
+Runs the planner for that day, prints who was feasible, who was rejected and why, the
+ranking and the choice for every job, then rolls everything back (ADR-023).
 
 ## Tests and quality checks
 
