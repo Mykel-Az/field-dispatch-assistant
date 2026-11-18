@@ -5,7 +5,14 @@ from .base import *
 DEBUG = False
 SECRET_KEY = os.environ["SECRET_KEY"]
 
-DATABASES = {"default": dj_database_url.config(conn_max_age=600, ssl_require=True)}
+_database = dj_database_url.config(conn_max_age=600)
+# Require SSL for Postgres only. `ssl_require=True` adds `sslmode` for every engine, and
+# SQLite (which CI uses for `check --deploy`) rejects it as soon as Django opens a
+# connection, which its model checks do to probe the JSONField. A `?sslmode=` in the
+# URL still wins over the default.
+if "postgresql" in _database.get("ENGINE", ""):
+    _database.setdefault("OPTIONS", {}).setdefault("sslmode", "require")
+DATABASES = {"default": _database}
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
