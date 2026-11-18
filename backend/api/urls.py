@@ -14,6 +14,10 @@ from .views import (
     ScheduleGenerateView,
     ScheduleView,
     SkillViewSet,
+    TechnicianArriveView,
+    TechnicianCompleteView,
+    TechnicianIncompleteView,
+    TechnicianJobsView,
     TechnicianViewSet,
     UserViewSet,
     get_csrf_token,
@@ -40,6 +44,22 @@ urlpatterns = [
     path("schedule/", ScheduleView.as_view(), name="schedule"),
     path(
         "schedule/generate/", ScheduleGenerateView.as_view(), name="schedule-generate"
+    ),
+    path("technician/me/jobs/", TechnicianJobsView.as_view(), name="technician-jobs"),
+    path(
+        "technician/me/jobs/<int:pk>/arrive/",
+        TechnicianArriveView.as_view(),
+        name="technician-job-arrive",
+    ),
+    path(
+        "technician/me/jobs/<int:pk>/complete/",
+        TechnicianCompleteView.as_view(),
+        name="technician-job-complete",
+    ),
+    path(
+        "technician/me/jobs/<int:pk>/incomplete/",
+        TechnicianIncompleteView.as_view(),
+        name="technician-job-incomplete",
     ),
     path("", include(router.urls)),
 ]

@@ -31,6 +31,14 @@ MATRIX = [
      {ANON: 401, TECH: 403, DISP: 200, HEAD: 200, SUPER: 403}),
     ("post", "/api/schedule/generate/", {},
      {ANON: 401, TECH: 403, DISP: 409, HEAD: 409, SUPER: 403}),
+    ("get", "/api/technician/me/jobs/", None,
+     {ANON: 401, TECH: 200, DISP: 403, HEAD: 403, SUPER: 403}),
+    ("post", "/api/technician/me/jobs/999999/arrive/", None,
+     {ANON: 401, TECH: 404, DISP: 403, HEAD: 403, SUPER: 403}),
+    ("post", "/api/technician/me/jobs/999999/complete/", None,
+     {ANON: 401, TECH: 404, DISP: 403, HEAD: 403, SUPER: 403}),
+    ("post", "/api/technician/me/jobs/999999/incomplete/", {"reason": "x"},
+     {ANON: 401, TECH: 404, DISP: 403, HEAD: 403, SUPER: 403}),
 ]  # fmt: skip
 
 

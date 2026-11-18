@@ -94,6 +94,8 @@ export type PlanReason = components['schemas']['PlanReason'];
 
 export type JobRow = components['schemas']['Job'];
 export type JobDetail = components['schemas']['JobDetail'];
+/** What a technician sees of their own job (GET /technician/me/jobs/). */
+export type TechnicianJob = components['schemas']['TechnicianJob'];
 export type JobHistoryRow = components['schemas']['JobHistory'];
 export type JobPriority = components['schemas']['PriorityEnum'];
 export type JobCreateInput = components['schemas']['JobCreate'];

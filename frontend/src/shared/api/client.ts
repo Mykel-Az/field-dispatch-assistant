@@ -13,6 +13,7 @@ import type {
   ScheduleResult,
   User,
   Technician,
+  TechnicianJob,
   TechnicianUpdate,
 } from './models';
 
@@ -84,6 +85,18 @@ export const assignJob = (id: number, technicianId: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/assign/`, { technician_id: technicianId, version });
 export const unassignJob = (id: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/unassign/`, { version });
+
+// --- the technician's own day (technician role only) ---
+/** My jobs for a day in visiting order (default: today on the organization's clock). */
+export const fetchMyJobs = (date?: string) =>
+  get<TechnicianJob[]>(`/technician/me/jobs/${date ? `?date=${encodeURIComponent(date)}` : ''}`);
+// Each action is safe to repeat: a second tap answers 200 with the job as it is.
+export const arriveJob = (id: number) => post<TechnicianJob>(`/technician/me/jobs/${id}/arrive/`);
+export const completeJob = (id: number) =>
+  post<TechnicianJob>(`/technician/me/jobs/${id}/complete/`);
+/** Could not finish: needs a reason, and the job goes back to the dispatcher's queue. */
+export const incompleteJob = (id: number, reason: string) =>
+  post<TechnicianJob>(`/technician/me/jobs/${id}/incomplete/`, { reason });
 
 export interface AddressCheck {
   status: 'ok' | 'approximate' | 'failed' | 'pending' | 'manual';

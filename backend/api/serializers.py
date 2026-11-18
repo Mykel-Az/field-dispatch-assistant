@@ -547,6 +547,49 @@ class JobAssignSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class TechnicianJobSerializer(serializers.ModelSerializer):
+    """What a technician sees of their own job: what they need in the field, and
+    nothing the office uses to run the plan (no history, version or explanation)."""
+
+    class Meta:
+        model = Job
+        fields = [
+            "id",
+            "title",
+            "customer_name",
+            "customer_phone",
+            "address",
+            "postal_code",
+            "description",
+            "category",
+            "is_urgent",
+            "priority",
+            "status",
+            "scheduled_date",
+            "slot_start",
+            "slot_end",
+            "slot_is_fixed",
+            "estimated_arrival",
+            "estimated_duration_minutes",
+            "sequence_position",
+            "lat",
+            "lng",
+            "arrived_at",
+            "completed_at",
+        ]
+        read_only_fields = fields
+
+
+class TechnicianJobsQuerySerializer(serializers.Serializer):
+    """GET /technician/me/jobs/. `date` defaults to today on the organization's clock."""
+
+    date = serializers.DateField(required=False)
+
+
+class TechnicianIncompleteSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500)
+
+
 class JobUnassignSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 

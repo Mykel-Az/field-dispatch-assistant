@@ -1,13 +1,13 @@
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.db import transaction
-from django.db.models import Prefetch
+from django.db.models import F, Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -24,7 +24,12 @@ from .models import (
     Skill,
     Technician,
 )
-from .permissions import IsDispatcher, IsHeadDispatcher, IsSignedInMember
+from .permissions import (
+    IsDispatcher,
+    IsHeadDispatcher,
+    IsSignedInMember,
+    IsTechnician,
+)
 from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
@@ -51,6 +56,9 @@ from .serializers import (
     SkillSerializer,
     StaffCreateSerializer,
     TechnicianDetailSerializer,
+    TechnicianIncompleteSerializer,
+    TechnicianJobSerializer,
+    TechnicianJobsQuerySerializer,
     TechnicianUpdateSerializer,
     UserSerializer,
     UserUpdateSerializer,
@@ -635,3 +643,125 @@ class ScheduleView(APIView):
             plan_date=query.validated_data.get("date"),
         )
         return Response(ScheduleResultSerializer(result).data)
+
+
+# ---- the technician's own day (S2-7) ------------------------------------------
+def _my_technician(request):
+    """The signed-in technician's profile, or 404 (a technician user with no profile
+    has nothing to show)."""
+    technician = (
+        Technician.objects.for_organization(request.user.organization)
+        .filter(user=request.user)
+        .first()
+    )
+    if technician is None:
+        raise NotFound("No technician profile.")
+    return technician
+
+
+class TechnicianJobsView(generics.ListAPIView):
+    """GET /technician/me/jobs/?date=: the signed-in technician's own jobs for a day,
+    in the order they will be visited. Nobody else's job can appear here."""
+
+    permission_classes = [IsTechnician]
+    serializer_class = TechnicianJobSerializer
+    pagination_class = (
+        None  # one technician's day is small and bounded by the daily limit
+    )
+
+    @extend_schema(
+        parameters=[OpenApiParameter("date", OpenApiTypes.DATE, required=False)],
+        responses=TechnicianJobSerializer(many=True),
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
+
+    def get_queryset(self):
+        query = TechnicianJobsQuerySerializer(data=self.request.query_params)
+        query.is_valid(raise_exception=True)
+        organization = self.request.user.organization
+        day = query.validated_data.get("date") or job_service.local_date(
+            None, organization.timezone
+        )
+        return (
+            Job.objects.for_organization(organization)
+            .filter(
+                technician=_my_technician(self.request),
+                scheduled_date=day,
+                status__in=["assigned", "ongoing", "completed"],
+            )
+            .order_by(F("sequence_position").asc(nulls_last=True), "slot_start", "id")
+        )
+
+
+class _TechnicianJobAction(APIView):
+    """POST /technician/me/jobs/{id}/<action>/. Repeating it answers 200 (the job as
+    it is now), a job in the wrong state 409, and a job that is not theirs 404."""
+
+    permission_classes = [IsTechnician]
+
+    def perform(self, request, job, technician):
+        raise NotImplementedError
+
+    def post(self, request, pk):
+        technician = _my_technician(request)
+        job = (
+            Job.objects.for_organization(request.user.organization)
+            .filter(pk=pk)
+            .first()
+        )
+        if job is None:
+            raise NotFound()
+        try:
+            done = self.perform(request, job, technician)
+        except job_service.NotYourJob:
+            raise NotFound() from None  # same answer for "not yours" and "does not exist"
+        except job_service.AnotherJobOngoing as error:
+            raise Conflict(str(error), code="another_job_ongoing") from None
+        except job_service.IllegalJobTransition:
+            current = Job.objects.get(pk=job.pk).status
+            raise Conflict(
+                f"A {current} job cannot be changed that way.",
+                code="illegal_transition",
+            ) from None
+        return Response(TechnicianJobSerializer(done).data)
+
+
+class TechnicianArriveView(_TechnicianJobAction):
+    @extend_schema(request=None, responses=TechnicianJobSerializer)
+    def post(self, request, pk):
+        return super().post(request, pk)
+
+    def perform(self, request, job, technician):
+        return job_service.arrive_job(
+            job=job, technician=technician, actor=request.user
+        )
+
+
+class TechnicianCompleteView(_TechnicianJobAction):
+    @extend_schema(request=None, responses=TechnicianJobSerializer)
+    def post(self, request, pk):
+        return super().post(request, pk)
+
+    def perform(self, request, job, technician):
+        return job_service.complete_job(
+            job=job, technician=technician, actor=request.user
+        )
+
+
+class TechnicianIncompleteView(_TechnicianJobAction):
+    @extend_schema(
+        request=TechnicianIncompleteSerializer, responses=TechnicianJobSerializer
+    )
+    def post(self, request, pk):
+        return super().post(request, pk)
+
+    def perform(self, request, job, technician):
+        serializer = TechnicianIncompleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return job_service.incomplete_job(
+            job=job,
+            technician=technician,
+            actor=request.user,
+            reason=serializer.validated_data["reason"],
+        )
