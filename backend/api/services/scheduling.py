@@ -7,6 +7,7 @@ lifecycle, the history rows and the one-ongoing-job rule all still apply.
 Everything happens in one transaction: a failure leaves no half-planned day.
 """
 
+import logging
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -25,6 +26,8 @@ from dispatch_engine.types import Explanation
 from ..adapters import at_local, job_to_view, org_to_config, technician_to_view
 from ..models import GeocodeStatus, Job, JobStatus, Organization, Technician
 from .jobs import local_date, transition
+
+log = logging.getLogger(__name__)
 
 USABLE_LOCATION = (GeocodeStatus.OK, GeocodeStatus.APPROXIMATE, GeocodeStatus.MANUAL)
 
@@ -188,6 +191,18 @@ def generate_schedule(
             )
             unassigned.append(UnplannedJob(u.job_id, reasons, sentence))
 
+    late = [p for p in assigned if p.slack_minutes < 0]
+    log.info(
+        "planner run: org %s, day %s, %d candidate jobs, %d assigned, %d unassigned, "
+        "%d skipped (no location), %d expected to miss their window",
+        organization.pk,
+        plan_date,
+        len(plannable),
+        len(assigned),
+        len(unassigned),
+        len(skipped),
+        len(late),
+    )
     return ScheduleResult(plan_date, assigned, unassigned, skipped)
 
 

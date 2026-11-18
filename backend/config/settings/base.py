@@ -181,3 +181,20 @@ AUTH_USER_MODEL = "api.CustomUser"
 # The default fails every lookup on purpose: real coordinates only come from a
 # real provider. Tests and local development override it with the fake.
 GEOCODER_CLASS = os.getenv("GEOCODER_CLASS", "geocoding.base.UnavailableGeocoder")
+
+# Planner decision trail. PLANNER_LOG_LEVEL=DEBUG prints, for every job, who was
+# feasible, who was rejected and why, the ranking, and the choice (ids and numbers
+# only, never customer data). INFO (the default) prints one summary line per run.
+PLANNER_LOG_LEVEL = os.getenv("PLANNER_LOG_LEVEL", "INFO").upper()
+PLANNER_LOGGERS = {
+    "dispatch_engine": {"level": PLANNER_LOG_LEVEL},
+    "api.services.scheduling": {"level": PLANNER_LOG_LEVEL},
+}
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"plain": {"format": "%(asctime)s %(name)s %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "plain"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": PLANNER_LOGGERS,
+}
