@@ -3,6 +3,14 @@ import { useAuth } from '../../auth/useAuth';
 import { deactivateUser, fetchTechnicians, reactivateUser } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
 import type { Technician } from '../../shared/api/models';
+import {
+  HeadCell,
+  StackedBody,
+  StackedCell,
+  StackedHead,
+  StackedRow,
+  StackedTable,
+} from '../../shared/components/StackedTable';
 import { ui } from '../../shared/ui';
 import TechnicianForm from '../components/TechnicianForm';
 
@@ -43,7 +51,7 @@ export default function TechniciansPage() {
 
   return (
     <section className={ui.card}>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Technicians</h1>
         {canManage && formFor === undefined && (
           <button className={ui.btn} onClick={() => setFormFor(null)}>Add technician</button>
@@ -73,26 +81,28 @@ export default function TechniciansPage() {
       )}
 
       {technicians && technicians.length > 0 && (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-line text-ink-muted">
-              <th className="p-2">Name</th>
-              <th className="p-2">Shift</th>
-              <th className="p-2">Skills</th>
-              <th className="p-2">Phone</th>
-              <th className="p-2">Status</th>
-              {canManage && <th />}
-            </tr>
-          </thead>
-          <tbody>
+        <StackedTable label="Technicians">
+          <StackedHead>
+            <HeadCell>Name</HeadCell>
+            <HeadCell>Shift</HeadCell>
+            <HeadCell>Skills</HeadCell>
+            <HeadCell>Phone</HeadCell>
+            <HeadCell>Status</HeadCell>
+            {canManage && <HeadCell />}
+          </StackedHead>
+          <StackedBody>
             {technicians.map((t) => (
-              <tr key={t.id} className={`border-b border-line ${t.user.is_active ? '' : 'text-ink-muted'}`}>
-                <td className="p-2">
-                  <div className="font-medium">{t.user.full_name}</div>
-                  <div className="text-xs text-ink-muted">{t.user.email}</div>
-                </td>
-                <td className="p-2 whitespace-nowrap">{hhmm(t.shift_start)}–{hhmm(t.shift_end)}</td>
-                <td className="p-2">
+              <StackedRow key={t.id} muted={!t.user.is_active}>
+                <StackedCell label="Name">
+                  <div className="min-w-0">
+                    <div className="font-medium">{t.user.full_name}</div>
+                    <div className="break-all text-xs text-ink-muted">{t.user.email}</div>
+                  </div>
+                </StackedCell>
+                <StackedCell label="Shift">
+                  <span className="whitespace-nowrap">{hhmm(t.shift_start)}–{hhmm(t.shift_end)}</span>
+                </StackedCell>
+                <StackedCell label="Skills">
                   {t.skills.length === 0 ? (
                     <span className="text-ink-muted">none</span>
                   ) : (
@@ -102,21 +112,21 @@ export default function TechniciansPage() {
                       ))}
                     </div>
                   )}
-                </td>
-                <td className="p-2">{t.phone || '—'}</td>
-                <td className="p-2">{t.user.is_active ? 'Active' : 'Deactivated'}</td>
+                </StackedCell>
+                <StackedCell label="Phone">{t.phone || '—'}</StackedCell>
+                <StackedCell label="Status">{t.user.is_active ? 'Active' : 'Deactivated'}</StackedCell>
                 {canManage && (
-                  <td className="p-2 text-right whitespace-nowrap">
-                    <button className={`${ui.btnSmall} mr-2`} onClick={() => setFormFor(t)}>Edit</button>
+                  <StackedCell actions>
+                    <button className={ui.btnSmall} onClick={() => setFormFor(t)}>Edit</button>
                     <button className={ui.btnSmall} onClick={() => toggleActive(t)}>
                       {t.user.is_active ? 'Deactivate' : 'Reactivate'}
                     </button>
-                  </td>
+                  </StackedCell>
                 )}
-              </tr>
+              </StackedRow>
             ))}
-          </tbody>
-        </table>
+          </StackedBody>
+        </StackedTable>
       )}
     </section>
   );
