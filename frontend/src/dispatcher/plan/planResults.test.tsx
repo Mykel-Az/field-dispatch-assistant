@@ -2,11 +2,29 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models';
 import PlanResults from './PlanResults';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// Leaflet needs a real browser. The stand-in has one button per marker and shows which is selected.
+vi.mock('./PlanMap', () => ({
+  default: ({ data, selectedId, onSelect }: {
+    data: { routes: { stops: { jobId: number; number: number }[] }[]; misses: { jobId: number }[] };
+    selectedId: number | null;
+    onSelect: (id: number) => void;
+  }) => (
+    <div data-testid="map" data-selected={String(selectedId)}>
+      {data.routes.flatMap((r) => r.stops).map((s) => (
+        <button key={s.jobId} data-marker={s.jobId} onClick={() => onSelect(s.jobId)}>pin {s.number}</button>
+      ))}
+      {data.misses.map((m) => (
+        <button key={m.jobId} data-marker={m.jobId} onClick={() => onSelect(m.jobId)}>miss</button>
+      ))}
+    </div>
+  ),
+}));
 
 let root: Root;
 let host: HTMLElement;
@@ -190,3 +208,59 @@ describe('PlanResults', () => {
     expect(host.textContent).toContain('Job #99');
   });
 });
+
+describe('PlanResults map', () => {
+  const planned: ScheduleResult = {
+    ...base,
+    assigned: [10, 11].map((id, i) => ({
+      job_id: id, technician_id: 1, estimated_arrival: `2026-11-02T1${5 + i}:00:00Z`,
+      sla_label: 'ok', slack_minutes: 30, reasons: [], sentence: `Sam for ${id}.`,
+    })),
+    unassigned: [{ job_id: 12, reasons: [], sentence: 'No one could take it.' }],
+  } as unknown as ScheduleResult;
+  const where = new Map([[10, { lat: 30.1, lng: -97.1 }], [11, { lat: 30.2, lng: -97.2 }], [12, { lat: 30.3, lng: -97.3 }]]);
+  const mountMap = (locations?: typeof where) =>
+    act(() =>
+      root.render(
+        <MemoryRouter>
+          <PlanResults result={planned} technicians={technicians} jobs={jobs} timezone="America/Chicago"
+            locations={locations} office={{ lat: 30, lng: -97 }} />
+        </MemoryRouter>,
+      ),
+    );
+  const card = (id: number) => host.querySelector(`#plan-job-${id}`) as HTMLElement;
+  const click = (el: Element) => act(() => (el as HTMLElement).click());
+
+  it('shows the map, its key, and a numbered badge on each stop', async () => {
+    await mountMap(where);
+    expect(host.querySelector('[data-testid=map]')).toBeTruthy();
+    expect(host.textContent).toContain('not road routes');
+    expect(card(10).querySelector('[aria-label="Stop 1"]')).toBeTruthy();
+    expect(card(11).querySelector('[aria-label="Stop 2"]')).toBeTruthy();
+  });
+
+  it('has no map when no job has a known location', async () => {
+    await mountMap(undefined);
+    expect(host.querySelector('[data-testid=map]')).toBeNull();
+    expect(host.textContent).toContain('Sam for 10.'); // the plan itself is unaffected
+  });
+
+  it('lights up a card when its marker is clicked, and clears the previous one', async () => {
+    await mountMap(where);
+    await click(host.querySelector('[data-marker="10"]')!);
+    expect(card(10).className).toContain('ring-2');
+    await click(host.querySelector('[data-marker="11"]')!);
+    expect(card(11).className).toContain('ring-2');
+    expect(card(10).className).not.toContain('ring-2');
+  });
+
+  it('lights up the marker when its card is clicked, unassigned jobs included', async () => {
+    await mountMap(where);
+    await click(card(11));
+    expect(host.querySelector('[data-testid=map]')!.getAttribute('data-selected')).toBe('11');
+    await click(card(12));
+    expect(host.querySelector('[data-testid=map]')!.getAttribute('data-selected')).toBe('12');
+    expect(card(12).className).toContain('ring-2');
+  });
+});
+
