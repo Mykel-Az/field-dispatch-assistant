@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../auth/useAuth';
 import {
   fetchJobs,
+  fetchMapJobs,
   fetchSchedule,
   fetchTechnicians,
   generateSchedule,
@@ -10,6 +11,7 @@ import {
 import { ApiError } from '../../shared/api/http';
 import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models';
 import { NO_FILTERS } from '../../shared/filters';
+import { useOffice } from '../../shared/map/useOffice';
 import { ui } from '../../shared/ui';
 import PlanResults from '../plan/PlanResults';
 import { addDays, MAX_DAYS_AHEAD, todayOnClock } from '../plan/planModel';
@@ -20,7 +22,13 @@ type Failure = {
   /** What "Try again" repeats. */
   retry: 'load' | 'run';
 };
-type Outcome = { result: ScheduleResult; technicians: Technician[]; jobs: Map<number, JobRow> };
+type Place = { lat: number; lng: number };
+type Outcome = {
+  result: ScheduleResult;
+  technicians: Technician[];
+  jobs: Map<number, JobRow>;
+  locations: Map<number, Place>;
+};
 
 function describe(error: unknown, retry: Failure['retry']): Failure {
   const action = retry === 'run' ? 'plan the day' : 'load the plan';
@@ -55,13 +63,28 @@ async function loadJobs(date: string): Promise<Map<number, JobRow>> {
   return byId;
 }
 
+/** Where the day's planned and unassigned jobs are, for the map. Never fails the page. */
+async function loadLocations(date: string): Promise<Map<number, Place>> {
+  try {
+    const pins = await fetchMapJobs({
+      ...NO_FILTERS,
+      date,
+      statuses: ['assigned', 'ongoing', 'unassigned'],
+    });
+    return new Map(pins.results.map((p) => [p.id, { lat: p.lat, lng: p.lng }]));
+  } catch {
+    return new Map(); // no map, but the plan itself is still there
+  }
+}
+
 /** The names and titles a plan needs. Lookups that fail only cost the nicer labels. */
 async function withContext(result: ScheduleResult): Promise<Outcome> {
-  const [technicians, jobs] = await Promise.all([
+  const [technicians, jobs, locations] = await Promise.all([
     fetchTechnicians().catch(() => [] as Technician[]),
     loadJobs(result.plan_date),
+    loadLocations(result.plan_date),
   ]);
-  return { result, technicians, jobs };
+  return { result, technicians, jobs, locations };
 }
 
 const isEmpty = (r: ScheduleResult) =>
@@ -78,6 +101,7 @@ const dayLabel = (date: string) =>
 export default function PlanPage() {
   const { user } = useAuth();
   const timezone = user?.organization.timezone;
+  const office = useOffice();
   const today = todayOnClock(timezone);
   // The chosen day lives in the URL, so coming back from a job opens the same day.
   const [params, setParams] = useSearchParams();
@@ -116,8 +140,11 @@ export default function PlanPage() {
     setRunning(true);
     setFailure(null);
     try {
-      const result = await generateSchedule(date);
-      setOutcome(await withContext(result));
+      const ran = await generateSchedule(date);
+      // A run answers for the jobs it just looked at. Show the whole day instead, so
+      // running twice does not make the first run's jobs vanish from the page.
+      const whole = await fetchSchedule(date).catch(() => ran);
+      setOutcome(await withContext(whole));
     } catch (error) {
       setFailure(describe(error, 'run'));
     } finally {
@@ -193,6 +220,8 @@ export default function PlanPage() {
             technicians={outcome.technicians}
             jobs={outcome.jobs}
             timezone={timezone}
+            locations={outcome.locations}
+            office={office}
           />
         </>
       )}

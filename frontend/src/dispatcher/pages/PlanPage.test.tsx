@@ -14,8 +14,12 @@ const api = vi.hoisted(() => ({
   generateSchedule: vi.fn(),
   fetchTechnicians: vi.fn(),
   fetchJobs: vi.fn(),
+  fetchMapJobs: vi.fn(),
+  fetchOrganization: vi.fn(),
 }));
 vi.mock('../../shared/api/client', () => api);
+// Leaflet needs a real browser; the map is checked there.
+vi.mock('../plan/PlanMap', () => ({ default: () => null }));
 vi.mock('../../auth/useAuth', () => ({
   useAuth: () => ({
     user: { organization: { timezone: 'America/Chicago' }, role: 'dispatcher' },
@@ -31,6 +35,8 @@ beforeEach(() => {
   api.generateSchedule.mockReset();
   api.fetchTechnicians.mockReset().mockResolvedValue([]);
   api.fetchJobs.mockReset().mockResolvedValue({ results: [], next: null });
+  api.fetchMapJobs.mockReset().mockResolvedValue({ results: [], truncated: false });
+  api.fetchOrganization.mockReset().mockResolvedValue({ lat: 30, lng: -97 });
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -128,6 +134,7 @@ describe('PlanPage', () => {
 
   it('runs the plan for the chosen day and shows the results', async () => {
     api.generateSchedule.mockResolvedValue(done);
+    api.fetchSchedule.mockResolvedValueOnce(nothing).mockResolvedValue(done);
     await mount();
     await click('Run plan');
     expect(api.generateSchedule).toHaveBeenCalledTimes(1);
@@ -147,6 +154,24 @@ describe('PlanPage', () => {
     expect(button.disabled).toBe(true);
     await act(async () => finish(done));
     expect(api.generateSchedule).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the whole day after a run, not only the jobs that run looked at', async () => {
+    // A second run on a planned day has nothing new to place; the page must still list the day's plan.
+    api.generateSchedule.mockResolvedValue(nothing);
+    api.fetchSchedule.mockResolvedValue(done);
+    await mount();
+    await click('Run plan');
+    expect(host.textContent).toContain('Sam was chosen.');
+  });
+
+  it('falls back to what the run returned when the day cannot be reloaded', async () => {
+    api.generateSchedule.mockResolvedValue(done);
+    api.fetchSchedule.mockResolvedValueOnce(nothing).mockRejectedValue(new Error('down'));
+    await mount();
+    await click('Run plan');
+    expect(host.textContent).toContain('Sam was chosen.');
+    expect(host.querySelector('[role=alert]')).toBeNull();
   });
 
   it('sends a 409 to the organization settings', async () => {
@@ -178,6 +203,7 @@ describe('PlanPage', () => {
 
   it('offers a retry after a network failure, and a retry works', async () => {
     api.generateSchedule.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    api.fetchSchedule.mockResolvedValueOnce(nothing).mockResolvedValue(done);
     await mount();
     await click('Run plan');
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('try again');
@@ -189,11 +215,28 @@ describe('PlanPage', () => {
 
   it('still shows the plan when the technician or job lookups fail', async () => {
     api.generateSchedule.mockResolvedValue(done);
+    api.fetchSchedule.mockResolvedValueOnce(nothing).mockResolvedValue(done);
     api.fetchTechnicians.mockRejectedValue(new Error('x'));
     api.fetchJobs.mockRejectedValue(new Error('x'));
     await mount();
     await click('Run plan');
     expect(host.textContent).toContain('Technician #1');
     expect(host.textContent).toContain('Job #10');
+  });
+
+  it('asks where the day’s jobs are, for the map', async () => {
+    api.fetchSchedule.mockResolvedValue(done);
+    await mount();
+    expect(api.fetchMapJobs).toHaveBeenCalledWith(
+      expect.objectContaining({ date: '2026-11-02', statuses: ['assigned', 'ongoing', 'unassigned'] }),
+    );
+  });
+
+  it('still shows the plan when the locations cannot be loaded', async () => {
+    api.fetchSchedule.mockResolvedValue(done);
+    api.fetchMapJobs.mockRejectedValue(new Error('down'));
+    await mount();
+    expect(host.textContent).toContain('Sam was chosen.');
+    expect(host.querySelector('[role=alert]')).toBeNull();
   });
 });
