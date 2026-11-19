@@ -27,3 +27,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [021](021-any-time-jobs.md) | "Any time that day" jobs are a movable window |
 | [022](022-daily-limit-is-a-hard-cap.md) | The daily limit is a hard cap for planned work |
 | [023](023-plan-in-deadline-order-and-never-late-by-choice.md) | Plan in deadline order; never choose a late technician when another is on time |
+| [024](024-timezone-change-rule.md) | The time zone cannot change while jobs are Assigned or Ongoing |

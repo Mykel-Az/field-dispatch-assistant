@@ -59,7 +59,11 @@ export default function OrganizationPage() {
       await refreshUser().catch(() => undefined);
       setMessage('Saved.');
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && err.status === 409 && (err.body as { code?: string })?.code === 'timezone_locked') {
+        // The server's message says how many jobs are in the way. The form keeps the user's edit; the
+        // saved zone (and every screen's clock) is unchanged.
+        setErrors({ timezone: err.message });
+      } else if (err instanceof ApiError && err.status === 409) {
         // Someone else saved first: show their version, keep the user informed. Race condition/concurrency
         setErrors({ _: 'Someone else changed these settings. The latest values are loaded; re-apply your edit.' });
         fetchOrganization().then(apply).catch(() => undefined);
@@ -110,8 +114,10 @@ export default function OrganizationPage() {
             ))}
           </select>
           <span className="text-sm font-normal text-ink-muted">
-            Every job time and working hour is on this clock, whatever zone your computer is in.
+            Every job time and working hour is on this clock, whatever zone your computer is in. It cannot be
+            changed while a job is assigned or in progress.
           </span>
+          {errors.timezone && <span role="alert" className={ui.error}>{errors.timezone}</span>}
         </label>
         <div className={ui.row}>
           {f('work_start', 'Working day starts', 'time')}

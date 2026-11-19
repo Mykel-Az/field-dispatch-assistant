@@ -19,6 +19,7 @@ from .mixins import TenantScopedViewMixin
 from .models import (
     GeocodeStatus,
     Job,
+    JobStatus,
     JobStatusHistory,
     Organization,
     Skill,
@@ -270,6 +271,36 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user.organization
 
+    @staticmethod
+    def _refuse_zone_change_while_jobs_are_live(org, data):
+        """ADR-024: the time zone cannot change while a job is Assigned or Ongoing.
+
+        Those jobs are already planned and some are under way, on the clock the
+        technicians and the customers were given. The dispatcher finishes or unassigns
+        them first. Raising here rolls the whole update back (name, hours and all).
+
+        TIME: the check and the save are one transaction on the organization row, but
+        an assignment does not lock that row, so a job assigned in the same instant
+        could slip past. Full-fidelity: lock the organization row (shared) in
+        `transition` when a job becomes Assigned, taking care over lock order.
+        """
+        if "timezone" not in data or data["timezone"] == org.timezone:
+            return
+        live = Job.objects.filter(
+            organization=org, status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING]
+        ).count()
+        if live:
+            noun = "job is" if live == 1 else "jobs are"
+            # `code` is also in the body: the page tells this 409 from a stale-version one by it.
+            message = (
+                f"The time zone cannot change while {live} {noun} assigned or in "
+                "progress. Finish or unassign them first."
+            )
+            raise Conflict(
+                {"detail": message, "code": "timezone_locked"},
+                code="timezone_locked",
+            )
+
     def perform_update(self, serializer):  # race conditions
         with transaction.atomic():
             org = Organization.objects.select_for_update().get(
@@ -278,6 +309,7 @@ class OrganizationView(generics.RetrieveUpdateAPIView):
             data = dict(serializer.validated_data)
             check_and_bump_version(org, data.pop("version"))
             serializer.instance = org
+            self._refuse_zone_change_while_jobs_are_live(org, data)
             if data.get("lat") is not None and data.get("lng") is not None:
                 data["geocode_status"] = GeocodeStatus.MANUAL
             # Jobs follow the clock: a new zone moves their days, new opening
