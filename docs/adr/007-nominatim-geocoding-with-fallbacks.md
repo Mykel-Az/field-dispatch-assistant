@@ -26,3 +26,12 @@ A job is never Assigned while `geocode_status` is pending or failed (#16).
 ## Trade-offs
 - Nominatim has no SLA. Mitigation: caching, manual fallback, and a documented
   scaling path (self-hosted Nominatim or a paid provider) that is not built.
+
+## Amendment (2026-11-19): real responses
+The hand-written fixtures pin the parser's rules, but a hand-written fixture can
+only match what we think Nominatim sends. `python -m geocoding.capture_real_fixtures`
+saves raw answers for four public landmarks (house, street, postcode, no match)
+as `real_*.json`, and `test_geocoding_real_responses.py` runs the parser over
+every one. It is run by hand, never in CI: the public service has a 1 request
+per second policy and no SLA, and a CI run must not depend on it. Re-run it when
+Nominatim announces an API change or the parser is touched.
