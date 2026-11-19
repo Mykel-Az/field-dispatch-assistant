@@ -41,3 +41,6 @@ foreign key.
   database-level composite foreign key is the full-fidelity path (TIME).
 - Global tables mean one organization cannot define private skills. Upgrade:
   an organization-scoped skill table.
+
+## Amendment (2026-11-19)
+The organization time zone is locked while jobs are Assigned or Ongoing: see [ADR-024](024-timezone-change-rule.md).

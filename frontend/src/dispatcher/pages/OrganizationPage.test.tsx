@@ -89,3 +89,39 @@ describe('OrganizationPage planning settings', () => {
     expect(field('How the planner chooses a technician').disabled).toBe(true);
   });
 });
+
+describe('OrganizationPage time zone rule', () => {
+  const locked = () =>
+    new ApiError(409, {
+      detail: 'The time zone cannot change while 2 jobs are assigned or in progress. Finish or unassign them first.',
+      code: 'timezone_locked',
+    });
+
+  it('shows the server message at the time zone field and keeps the choice on screen', async () => {
+    api.updateOrganization.mockRejectedValue(locked());
+    await mount();
+    await type(field('Time zone'), 'America/Los_Angeles');
+    await save();
+    const alert = [...host.querySelectorAll('[role="alert"]')].map((e) => e.textContent).join(' ');
+    expect(alert).toContain('2 jobs are assigned or in progress');
+    expect(alert).not.toContain('Someone else');
+    expect(field('Time zone').value).toBe('America/Los_Angeles');
+    expect(api.fetchOrganization).toHaveBeenCalledTimes(1); // no reload: nothing was stale
+    expect(host.textContent).not.toContain('Saved.');
+  });
+
+  it('still treats a stale-version 409 as "someone else saved first" and reloads', async () => {
+    api.updateOrganization.mockRejectedValue(
+      new ApiError(409, { detail: 'This record was changed by someone else. Reload it.' }),
+    );
+    await mount();
+    await save();
+    expect(host.textContent).toContain('Someone else changed these settings');
+    expect(api.fetchOrganization).toHaveBeenCalledTimes(2);
+  });
+
+  it('explains the rule before anyone tries', async () => {
+    await mount();
+    expect(host.textContent).toContain('cannot be changed while a job is assigned or in progress');
+  });
+});
