@@ -25,3 +25,27 @@ interval (5–10 s for the demo, configurable). Tier 1 = full thin refetch.
 - The client shows a "last updated" indicator and retries on failure
   (see failure-mode table).
 - The append-only status history is core regardless of tier.
+
+## Amendment (2026-11-19): the interval is 30 seconds
+The "5–10 s for the demo" above was never what shipped; the app polls every
+30 s (`POLL_INTERVAL_MS` in `usePolling.ts`), and this records why.
+
+- **Own actions do not wait for it.** Assign, pin, edit and cancel call
+  `notifyJobsChanged()`, so the dispatcher's own screens and other tabs of the
+  same browser refresh at once. The interval only bounds how late *someone
+  else's* change shows: a technician pressing Arrive or Complete, or a second
+  dispatcher.
+- **Those changes happen on a scale of minutes.** A job lasts an hour or more
+  and technicians move between jobs in tens of minutes; a 30 s lag changes no
+  decision a dispatcher makes from the map. At 5 s the page would send six
+  times the requests for a view nobody can act on faster.
+- **Cost.** One thin request every 30 s is two a minute per open tab. Every
+  request also keeps the free-tier host and database awake (ADR-018), which is
+  right while someone is looking at the map and wasteful when nobody is.
+- **A hidden tab makes no requests.** The timer keeps ticking but skips while
+  `document.visibilityState` is hidden. Coming back (tab shown or window
+  focused; both events fire, so they are merged within 1 s) refreshes at once,
+  so a returning dispatcher never waits up to 30 s for current data.
+
+Raise or lower it in one place if the demo shows it is wrong. If a live
+technician view is ever needed, that is the point to look at Tier 2/3 or SSE.
