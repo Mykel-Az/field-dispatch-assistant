@@ -23,6 +23,7 @@ const tech = (id: number, name: string, start = '08:00:00', end = '17:00:00'): T
 
 const stop = (job_id: number, technician_id: number, estimated_arrival: string): PlannedJob => ({
   job_id,
+  placed_by: 'planner',
   technician_id,
   estimated_arrival,
   sla_label: 'ok',

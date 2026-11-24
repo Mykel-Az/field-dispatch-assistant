@@ -89,6 +89,29 @@ def _record(job, *, from_status, actor, reason, technician_id, source="manual"):
     )
 
 
+def _plain(value):
+    """A field value as JSON can hold it (dates become ISO text)."""
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat()
+    return value
+
+
+def _record_edit(job, *, actor, changes):
+    """One history row saying what an edit changed. No row when nothing changed."""
+    if not changes:
+        return
+    JobStatusHistory.objects.create(
+        organization_id=job.organization_id,
+        job=job,
+        from_status=job.status,
+        to_status=job.status,
+        technician_id=job.technician_id,
+        changed_by=actor,
+        kind="edit",
+        changes=changes,
+    )
+
+
 def local_date(moment, tz_name):
     """The calendar date of `moment` on the clock of `tz_name`.
     `moment=None` (an urgent job) means today there."""
@@ -149,27 +172,39 @@ def _plan_field_lock(job, client_version):
     return locked
 
 
-def pin_job(*, job, lat, lng, client_version):
+def pin_job(*, job, lat, lng, client_version, actor=None):
     """The dispatcher placed the job on the map by hand."""
     with transaction.atomic():
         locked = _plan_field_lock(job, client_version)
+        before = locked.location_label
         locked.lat, locked.lng = lat, lng
         locked.geocode_status = GeocodeStatus.MANUAL
         locked.location_label = "Pinned on the map"
         locked.save()
+        _record_edit(
+            locked, actor=actor, changes={"location": [before, locked.location_label]}
+        )
     return locked
 
 
-def retry_geocode(*, job, client_version):
+def retry_geocode(*, job, client_version, actor=None):
     """Look the stored address up again (the provider may have been down)."""
     probe = Job(address=job.address, postal_code=job.postal_code)
     locate(probe)  # network call: outside the transaction
     with transaction.atomic():
         locked = _plan_field_lock(job, client_version)
+        before = locked.location_label
         locked.lat, locked.lng = probe.lat, probe.lng
         locked.geocode_status = probe.geocode_status
         locked.location_label = probe.location_label
         locked.save()
+        _record_edit(
+            locked,
+            actor=actor,
+            changes={"location": [before, locked.location_label]}
+            if before != locked.location_label
+            else {},
+        )
     return locked
 
 
@@ -184,7 +219,7 @@ def create_job(*, organization, actor, skills, **fields):
     return job
 
 
-def update_job(*, job, client_version, skills=None, **changes):
+def update_job(*, job, client_version, skills=None, actor=None, **changes):
     """Edit a job under a row lock. 409 if the version is stale or the job is
     already planned and a plan field would change."""
     address_changed = any(
@@ -213,15 +248,27 @@ def update_job(*, job, client_version, skills=None, **changes):
         if plan_edit and locked.status != JobStatus.UNASSIGNED:
             raise JobNotEditable
 
+        diff = {
+            field: [_plain(getattr(locked, field)), _plain(value)]
+            for field, value in changes.items()
+            if getattr(locked, field) != value
+        }
         for field, value in changes.items():
             setattr(locked, field, value)
         if geocoded is not None:
+            if geocoded.location_label != locked.location_label:
+                diff["location"] = [locked.location_label, geocoded.location_label]
             locked.lat, locked.lng = geocoded.lat, geocoded.lng
             locked.geocode_status = geocoded.geocode_status
             locked.location_label = geocoded.location_label
         locked.save()
         if skills is not None:
+            before = sorted(locked.acceptable_skills.values_list("name", flat=True))
+            after = sorted(s.name for s in skills)
+            if before != after:
+                diff["skills"] = [before, after]
             locked.acceptable_skills.set(skills)
+        _record_edit(locked, actor=actor, changes=diff)
     return locked
 
 
@@ -365,7 +412,7 @@ def complete_job(*, job, technician, actor):
 def _returned_by(job, technician):
     """True when this technician already marked the job incomplete and it went back
     to the queue and nothing has happened to it since (the repeat of a finished action)."""
-    last_two = list(job.history.order_by("-id")[:2])
+    last_two = list(job.history.filter(kind="status").order_by("-id")[:2])
     return (
         job.status == JobStatus.UNASSIGNED
         and len(last_two) == 2

@@ -15,10 +15,13 @@ export interface TechnicianPlan {
 
 const hhmm = (t: string) => t.slice(0, 5);
 
-/** Group assigned jobs by technician: people A to Z, each person's stops by arrival. */
+/** Group assigned jobs by technician: people A to Z, each person's stops by arrival.
+ *  A job assigned by hand has no arrival time: it sorts by `windowStart` (the start of
+ *  its agreed window) and, with neither, goes last. */
 export function groupByTechnician(
   assigned: PlannedJob[],
   technicians: Technician[],
+  windowStart: (jobId: number) => string | null | undefined = () => null,
 ): TechnicianPlan[] {
   const byId = new Map(technicians.map((t) => [t.id, t]));
   const groups = new Map<number, TechnicianPlan>();
@@ -37,9 +40,8 @@ export function groupByTechnician(
     group.stops.push(stop);
   }
   const plans = [...groups.values()];
-  plans.forEach((p) =>
-    p.stops.sort((a, b) => a.estimated_arrival.localeCompare(b.estimated_arrival)),
-  );
+  const when = (s: PlannedJob) => s.estimated_arrival ?? windowStart(s.job_id) ?? '9999';
+  plans.forEach((p) => p.stops.sort((a, b) => when(a).localeCompare(when(b))));
   return plans.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -72,6 +74,9 @@ export function slackText(slackMinutes: number): string {
 
 /** "09:12" on the organization's clock. */
 export const arrivalTime = (iso: string, tz?: string) => splitLocal(iso, tz).time;
+
+/** True for a job a dispatcher assigned by hand (no planner arrival time or reasons). */
+export const isByHand = (stop: Pick<PlannedJob, 'placed_by'>) => stop.placed_by === 'manual';
 
 /** One line for the top of the results. */
 export function summaryLine(counts: {

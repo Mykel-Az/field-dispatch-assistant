@@ -68,6 +68,7 @@ const done: ScheduleResult = {
   assigned: [
     {
       job_id: 10,
+      placed_by: 'planner',
       technician_id: 1,
       estimated_arrival: '2026-11-02T15:12:00Z',
       sla_label: 'ok',
@@ -111,6 +112,39 @@ describe('PlanPage', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(api.fetchSchedule).toHaveBeenLastCalledWith(nextDay);
+  });
+
+  it('"Run plan" plans what is unassigned; "Plan again" asks the server to redo the planner’s own choices', async () => {
+    api.generateSchedule.mockResolvedValue(done);
+    api.fetchSchedule.mockResolvedValue(done);
+    await mount();
+    await click('Run plan');
+    expect(api.generateSchedule).toHaveBeenLastCalledWith(expect.stringMatching(/^\d{4}-/), false);
+    await click('Plan again');
+    expect(api.generateSchedule).toHaveBeenLastCalledWith(expect.stringMatching(/^\d{4}-/), true);
+    expect(api.generateSchedule).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a job assigned by hand with its technician, not only what a run just placed', async () => {
+    api.fetchSchedule.mockResolvedValue({
+      ...done,
+      assigned: [
+        ...done.assigned,
+        {
+          job_id: 11,
+          technician_id: 1,
+          estimated_arrival: null,
+          sla_label: 'unknown',
+          slack_minutes: 0,
+          reasons: [],
+          sentence: '',
+          placed_by: 'manual',
+        },
+      ],
+    });
+    await mount();
+    expect(host.textContent).toContain('Planned 2 jobs across 1 technician');
+    expect(host.textContent).toContain('Assigned by hand');
   });
 
   it('says it is loading, then clears that message', async () => {

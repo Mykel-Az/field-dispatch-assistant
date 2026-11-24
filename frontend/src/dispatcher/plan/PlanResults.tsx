@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models';
+import { formatWhen } from '../../shared/jobTime';
 import JobTags from '../../shared/components/JobTags';
 import type { LatLng } from '../../shared/map/PinMap';
 import { FROM_PLAN } from '../../shared/useBack';
@@ -9,6 +10,7 @@ import {
   arrivalTime,
   groupByTechnician,
   hasSla,
+  isByHand,
   rejectionLines,
   slackText,
   slaMeta,
@@ -60,7 +62,11 @@ export default function PlanResults({
   locations = NO_LOCATIONS,
   office = null,
 }: Props) {
-  const plans = useMemo(() => groupByTechnician(result.assigned, technicians), [result, technicians]);
+  const plans = useMemo(
+    () =>
+      groupByTechnician(result.assigned, technicians, (id) => jobs.get(id)?.slot_start),
+    [result, technicians, jobs],
+  );
   const mapData = useMemo(
     () =>
       buildPlanMap({
@@ -70,7 +76,8 @@ export default function PlanResults({
         technicians,
         office,
         titleOf: (id) => titleOf(jobs, id),
-        timeOf: (stop) => arrivalTime(stop.estimated_arrival, timezone),
+        timeOf: (stop) =>
+          stop.estimated_arrival ? arrivalTime(stop.estimated_arrival, timezone) : 'by hand',
       }),
     [plans, result.unassigned, locations, technicians, office, jobs, timezone],
   );
@@ -136,9 +143,15 @@ export default function PlanResults({
                       >
                         {i + 1}
                       </span>
-                      <span className="text-lg font-bold tabular-nums">
-                        {arrivalTime(stop.estimated_arrival, timezone)}
-                      </span>
+                      {stop.estimated_arrival ? (
+                        <span className="text-lg font-bold tabular-nums">
+                          {arrivalTime(stop.estimated_arrival, timezone)}
+                        </span>
+                      ) : (
+                        <span className="text-sm font-semibold tabular-nums">
+                          {jobs.get(stop.job_id) ? formatWhen(jobs.get(stop.job_id)!, timezone) : 'Time not set'}
+                        </span>
+                      )}
                       <Link
                         className="font-semibold text-brand-ink underline"
                         to={`/jobs/${stop.job_id}`}
@@ -147,6 +160,11 @@ export default function PlanResults({
                         {titleOf(jobs, stop.job_id)}
                       </Link>
                       <JobTags job={jobs.get(stop.job_id)} />
+                      {isByHand(stop) && (
+                        <span className="inline-flex items-center rounded-full border border-line bg-canvas px-3 py-0.5 text-sm font-semibold text-ink-muted">
+                          Assigned by hand
+                        </span>
+                      )}
                       {hasSla(stop.sla_label) && (
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-sm font-bold ${sla.classes}`}
@@ -156,7 +174,11 @@ export default function PlanResults({
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-sm">{stop.sentence}</p>
+                    <p className="mt-2 text-sm">
+                      {isByHand(stop)
+                        ? 'You assigned this job. The planner works around it: new jobs are planned after it.'
+                        : stop.sentence}
+                    </p>
                     <Why lines={rejectionLines(stop.reasons, technicians)} />
                   </li>
                 );

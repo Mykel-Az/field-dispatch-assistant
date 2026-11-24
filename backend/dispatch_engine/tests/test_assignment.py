@@ -205,11 +205,14 @@ def test_the_next_trip_starts_from_the_last_job():
 
 
 def test_load_from_the_first_job_sends_the_second_to_the_other_technician():
+    # 10 minutes of driving everywhere: the jobs are at different places (at the same
+    # place the first technician would take both, ADR-025).
     jobs = [job(1, end=300), job(2, end=300)]
     plan = run(
         jobs,
         [make_tech(id=1), make_tech(id=2)],
         make_config(scoring_strategy="balanced"),
+        StubDistance(10),
     )
     assert assigned(plan) == {1: 1, 2: 2}
 
@@ -540,3 +543,63 @@ def test_every_result_carries_its_reason(scenario):
         assert a.explanation.reasons[0].code == ReasonCode.ASSIGNED
     for u in plan.unassigned:
         assert u.explanation.reasons[0].code == ReasonCode.NO_FEASIBLE_TECHNICIAN
+
+
+# ---- same site (ADR-025) -----------------------------------------------------
+SPOT = Location(30.30, -97.70)
+P1, P2 = Location(30.10, -97.50), Location(30.50, -97.90)
+
+
+def _site_scenario():
+    """Technician 1 is a little closer to the site, so takes the first job. Technician 2
+    is idle, and under the balanced strategy would normally get the second."""
+    techs = [make_tech(id=1, position=P1), make_tech(id=2, position=P2)]
+    jobs = [
+        job(1, start=0, end=480, location=SPOT),
+        job(2, start=0, end=480, location=SPOT),
+    ]
+    return jobs, techs, ByPosition({P1: 8.0, P2: 12.0, SPOT: 0.0})
+
+
+def test_two_jobs_at_one_site_go_to_the_same_technician():
+    jobs, techs, distance = _site_scenario()
+    plan = run(jobs, techs, make_config(scoring_strategy="balanced"), distance)
+    assert assigned(plan) == {1: 1, 2: 1}
+
+
+def test_the_second_job_says_the_technician_is_already_there():
+    jobs, techs, distance = _site_scenario()
+    plan = run(jobs, techs, make_config(scoring_strategy="balanced"), distance)
+    second = next(a for a in plan.assignments if a.job_id == 2)
+    first = next(a for a in plan.assignments if a.job_id == 1)
+    assert ReasonCode.SAME_SITE in {r.code for r in second.explanation.reasons}
+    assert ReasonCode.SAME_SITE not in {r.code for r in first.explanation.reasons}
+
+
+def test_jobs_at_different_places_are_still_spread_by_the_strategy():
+    techs = [make_tech(id=1, position=P1), make_tech(id=2, position=P2)]
+    elsewhere = Location(30.39, -97.60)
+    jobs = [
+        job(1, start=0, end=480, location=SPOT),
+        job(2, start=0, end=480, location=elsewhere),
+    ]
+    distance = ByPosition({P1: 8.0, P2: 12.0, SPOT: 15.0}, default=15.0)
+    plan = run(jobs, techs, make_config(scoring_strategy="balanced"), distance)
+    assert assigned(plan) == {1: 1, 2: 2}
+
+
+def test_the_daily_limit_still_stops_a_technician_who_is_on_site():
+    jobs, techs, distance = _site_scenario()
+    config = make_config(scoring_strategy="balanced", max_jobs_per_tech_per_day=1)
+    plan = run(jobs, techs, config, distance)
+    assert assigned(plan) == {1: 1, 2: 2}
+
+
+def test_a_technician_without_the_skill_is_not_chosen_for_being_on_site():
+    jobs, techs, distance = _site_scenario()
+    jobs[1] = job(
+        2, start=0, end=480, location=SPOT, acceptable_skill_ids=frozenset({9})
+    )
+    techs[1] = make_tech(id=2, position=P2, skill_ids=frozenset({9}))
+    plan = run(jobs, techs, make_config(scoring_strategy="balanced"), distance)
+    assert assigned(plan)[2] == 2

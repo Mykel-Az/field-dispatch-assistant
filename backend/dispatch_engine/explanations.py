@@ -47,6 +47,8 @@ def explain_assignment(
             },
         )
     ]
+    if chosen.same_site:
+        reasons.append(Reason(ReasonCode.SAME_SITE, {"technician_id": tech.id}))
     if chosen.sla_label == SlaLabel.AT_RISK:
         reasons.append(Reason(ReasonCode.SLA_AT_RISK, {"slack_minutes": slack}))
     elif chosen.sla_label == SlaLabel.BREACH:
@@ -114,6 +116,8 @@ def assignment_sentence(
         parts.append(
             f"Best of {chosen['candidates']} available technicians ({chosen['strategy']} strategy)."
         )
+    if _first(why, ReasonCode.SAME_SITE):
+        parts.append(f"{label} already has a job at this location.")
     over = _first(why, ReasonCode.URGENT_OVER_LIMIT)
     if over:
         others = (

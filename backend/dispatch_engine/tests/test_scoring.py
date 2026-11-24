@@ -8,6 +8,7 @@ from hypothesis import strategies as st
 
 from dispatch_engine.scoring import (
     RISK_HORIZON_FACTOR,
+    SAME_SITE_MINUTES,
     STRATEGIES,
     deadline_for,
     get_strategy,
@@ -204,7 +205,13 @@ def test_same_inputs_give_the_same_ranking_in_any_input_order(pool, strategy, rn
     assert score_candidates(job, shuffled, techs, config) == first
     assert score_candidates(job, candidates, techs, config) == first
     assert list(first) == sorted(
-        first, key=lambda s: (s.sla_label == SlaLabel.BREACH, s.cost, s.technician_id)
+        first,
+        key=lambda s: (
+            s.sla_label == SlaLabel.BREACH,
+            not s.same_site,
+            s.cost,
+            s.technician_id,
+        ),
     )
 
 
@@ -237,5 +244,67 @@ def test_when_everyone_would_be_late_the_cheapest_still_wins():
     )
     ranked = score_candidates(
         job, [a, b], [make_tech(id=1), make_tech(id=2)], make_config()
+    )
+    assert [s.technician_id for s in ranked] == [2, 1]
+
+
+# ---- same site (ADR-025) -----------------------------------------------------
+def _site_pool():
+    return [
+        make_candidate(technician_id=1, travel_minutes=0.0),
+        make_candidate(technician_id=2, travel_minutes=0.0),
+    ]
+
+
+def test_a_technician_who_already_has_a_job_here_ranks_first_among_those_on_time():
+    candidates = [
+        make_candidate(technician_id=1, travel_minutes=0.0),
+        make_candidate(technician_id=2, travel_minutes=4.0),
+    ]
+    techs = [make_tech(id=1, assigned_count=4), make_tech(id=2, assigned_count=0)]
+    ranked = score_candidates(
+        make_job(), candidates, techs, make_config(scoring_strategy="balanced")
+    )
+    assert [s.technician_id for s in ranked] == [1, 2]
+    assert ranked[0].same_site and not ranked[1].same_site
+    assert ranked[0].cost > ranked[1].cost  # the idle one is cheaper on paper
+
+
+def test_being_at_the_workstation_with_no_jobs_yet_is_not_being_on_site():
+    techs = [make_tech(id=1, assigned_count=0), make_tech(id=2, assigned_count=0)]
+    ranked = score_candidates(make_job(), _site_pool(), techs, make_config())
+    assert not any(s.same_site for s in ranked)
+
+
+def test_a_short_drive_is_not_the_same_site():
+    just_over = SAME_SITE_MINUTES + 0.1
+    candidates = [make_candidate(technician_id=1, travel_minutes=just_over)]
+    ranked = score_candidates(
+        make_job(), candidates, [make_tech(id=1, assigned_count=2)], make_config()
+    )
+    assert not ranked[0].same_site
+
+
+def test_the_same_site_boundary_is_inclusive():
+    candidates = [make_candidate(technician_id=1, travel_minutes=SAME_SITE_MINUTES)]
+    ranked = score_candidates(
+        make_job(), candidates, [make_tech(id=1, assigned_count=2)], make_config()
+    )
+    assert ranked[0].same_site
+
+
+def test_being_on_site_never_puts_a_late_technician_ahead_of_one_on_time():
+    job = make_job(slot_start=NOW, slot_end=NOW + timedelta(hours=1))
+    here_but_late = make_candidate(
+        technician_id=1, travel_minutes=0.0, estimated_arrival=NOW + timedelta(hours=2)
+    )
+    elsewhere_on_time = make_candidate(
+        technician_id=2,
+        travel_minutes=20.0,
+        estimated_arrival=NOW + timedelta(minutes=20),
+    )
+    techs = [make_tech(id=1, assigned_count=3), make_tech(id=2)]
+    ranked = score_candidates(
+        job, [here_but_late, elsewhere_on_time], techs, make_config()
     )
     assert [s.technician_id for s in ranked] == [2, 1]

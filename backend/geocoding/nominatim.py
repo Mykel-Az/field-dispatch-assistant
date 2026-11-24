@@ -8,6 +8,7 @@ the cache and the throttle and is what settings.GEOCODER_CLASS points at.
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,6 +52,33 @@ def parse_response(payload, postal_code: str = "") -> GeocodeResult | None:
     )
 
 
+# A suite or unit is not part of the street address, and Nominatim's free-text search
+# fails on it ("1400 Lavaca St, Ste 100, Austin" finds nothing; without "Ste 100" it
+# finds the building). `UNIT` matches "Ste 100", "Suite C-120", "Apt 4B", "# 290".
+_UNIT_WORDS = r"(?:ste|suite|unit|apt|apartment|bldg|building|fl|floor|rm|room)"
+_UNIT_SEGMENT = re.compile(rf"^\s*(?:{_UNIT_WORDS}\b\.?|#).*$", re.IGNORECASE)
+_UNIT_INLINE = re.compile(
+    rf"\s+(?:{_UNIT_WORDS}\b\.?\s*#?\s*(?:[\w-]*\d[\w-]*|[A-Za-z]\b)|#\s*[\w-]+)",
+    re.IGNORECASE,
+)
+_TRAILING_ZIP = re.compile(r"[\s,]*\b(\d{5}(?:-\d{4})?)\s*$")
+
+
+def search_text(address: str, postal_code: str) -> str:
+    """What to ask Nominatim: the street address without suite or unit numbers, and
+    the ZIP once. A ZIP typed at the end of the address is the same ZIP as the ZIP
+    field, and sending it twice ("..., TX 78702, 78702") makes the search fail."""
+    street = address.strip()
+    zip_code = postal_code.strip()
+    found = _TRAILING_ZIP.search(street)
+    if found:
+        street = street[: found.start()]
+        zip_code = zip_code or found.group(1)
+    segments = [seg for seg in street.split(",") if not _UNIT_SEGMENT.match(seg)]
+    street = _UNIT_INLINE.sub("", ", ".join(seg.strip() for seg in segments))
+    return ", ".join(part for part in (street.strip(" ,"), zip_code) if part)
+
+
 class NominatimGeocoder:
     def __init__(
         self,
@@ -70,8 +98,12 @@ class NominatimGeocoder:
         self._fetch = fetch or self._http_get
 
     def build_url(self, address: str, postal_code: str) -> str:
-        query = ", ".join(p.strip() for p in (address, postal_code) if p.strip())
-        params = {"q": query, "format": "jsonv2", "limit": 1, "addressdetails": 1}
+        params = {
+            "q": search_text(address, postal_code),
+            "format": "jsonv2",
+            "limit": 1,
+            "addressdetails": 1,
+        }
         if self.country_codes:
             params["countrycodes"] = self.country_codes
         return f"{self.base_url}?{urllib.parse.urlencode(params)}"

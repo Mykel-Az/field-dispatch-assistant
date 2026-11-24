@@ -65,8 +65,11 @@ export const fetchSchedule = (date?: string) =>
   get<ScheduleResult>(`/schedule/${date ? `?date=${encodeURIComponent(date)}` : ''}`);
 
 /** Plan the unassigned jobs of one day (default: today on the organization's clock). */
-export const generateSchedule = (date?: string) =>
-  post<ScheduleResult>('/schedule/generate/', date ? { date } : {});
+export const generateSchedule = (date?: string, replan = false) =>
+  post<ScheduleResult>('/schedule/generate/', {
+    ...(date ? { date } : {}),
+    ...(replan ? { replan: true } : {}),
+  });
 
 // --- jobs (dispatcher and head dispatcher) ---
 export const fetchJobs = (filters: JobFilterValues = NO_FILTERS, page = 1) => {

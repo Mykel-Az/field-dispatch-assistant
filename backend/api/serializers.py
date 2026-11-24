@@ -324,6 +324,8 @@ class JobHistorySerializer(serializers.ModelSerializer):
             "reason",
             "changed_by",
             "source",
+            "kind",
+            "changes",
             "created_at",
         ]
         read_only_fields = fields
@@ -601,6 +603,8 @@ class ScheduleGenerateSerializer(serializers.Serializer):
     """POST /schedule/generate/. `date` defaults to today on the organization's clock."""
 
     date = serializers.DateField(required=False)
+    # Plan again the jobs the planner placed (ADR-026); hand-assigned jobs stay.
+    replan = serializers.BooleanField(required=False, default=False)
 
     def validate_date(self, value):
         organization = self.context["request"].user.organization
@@ -630,11 +634,12 @@ class PlanReasonSerializer(serializers.Serializer):
 class PlannedJobSerializer(serializers.Serializer):
     job_id = serializers.IntegerField()
     technician_id = serializers.IntegerField()
-    estimated_arrival = serializers.DateTimeField()
+    estimated_arrival = serializers.DateTimeField(allow_null=True)
     sla_label = serializers.CharField()
     slack_minutes = serializers.FloatField()
     reasons = PlanReasonSerializer(many=True)
     sentence = serializers.CharField()
+    placed_by = serializers.ChoiceField(choices=["planner", "manual"])
 
 
 class UnplannedJobSerializer(serializers.Serializer):

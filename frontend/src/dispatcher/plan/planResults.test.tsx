@@ -91,6 +91,7 @@ describe('PlanResults', () => {
       assigned: [
         {
           job_id: 10,
+          placed_by: 'planner',
           technician_id: 1,
           estimated_arrival: '2026-11-02T15:12:00Z',
           sla_label: 'ok',
@@ -103,6 +104,7 @@ describe('PlanResults', () => {
         },
         {
           job_id: 11,
+          placed_by: 'planner',
           technician_id: 2,
           estimated_arrival: '2026-11-02T16:00:00Z',
           sla_label: 'breach',
@@ -131,6 +133,7 @@ describe('PlanResults', () => {
       assigned: [
         {
           job_id: 10,
+          placed_by: 'planner',
           technician_id: 1,
           estimated_arrival: '2026-11-02T15:12:00Z',
           sla_label: 'unknown',
@@ -151,6 +154,7 @@ describe('PlanResults', () => {
       assigned: [
         {
           job_id: 10,
+          placed_by: 'planner',
           technician_id: 1,
           estimated_arrival: '2026-11-02T15:12:00Z',
           sla_label: 'ok',

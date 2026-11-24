@@ -116,6 +116,7 @@ class ReasonCode(StrEnum):
     SLA_AT_RISK = "sla_at_risk"
     SLA_BREACH = "sla_breach"
     URGENT_OVER_LIMIT = "urgent_over_limit"
+    SAME_SITE = "same_site"
     # why a job went to nobody (ASSIGN)
     NO_FEASIBLE_TECHNICIAN = "no_feasible_technician"
 
@@ -202,6 +203,9 @@ class Scored:
     sla_label: SlaLabel
     risk: float  # internal 0-1, for ranking only
     cost: float
+    # The technician already has a job at this spot (ADR-025): ranks first among
+    # technicians who would not be late.
+    same_site: bool = False
 
     def __post_init__(self):
         _require_aware("estimated_arrival", self.estimated_arrival)
