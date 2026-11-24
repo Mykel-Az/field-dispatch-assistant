@@ -17,6 +17,12 @@ from .types import Candidate, JobView, OrgConfig, Scored, SlaLabel, TechView
 # TIME: an estimate, tunable; the benchmark week is the place to tune it.
 RISK_HORIZON_FACTOR = 4.0
 
+# "Same place" for a technician who already has a job there (ADR-025): half a minute
+# of driving is about a quarter mile, one building or one complex, and further than a
+# geocoder usually misplaces two addresses on the same lot. Zero minutes would only
+# match identical coordinates.
+SAME_SITE_MINUTES = 0.5
+
 
 def deadline_for(job: JobView, travel_minutes: float, config: OrgConfig) -> datetime:
     """The latest the technician may arrive (invariant 4).
@@ -133,19 +139,22 @@ def score_candidates(
     A technician who would miss the job's window (a breach, which is what an
     overlap with their earlier job looks like) comes after every technician who would
     not, whatever the costs: nobody is sent late while someone else can be on time
-    (ADR-023). Among the rest, lowest cost first, then lowest id.
+    (ADR-023). Among the rest, a technician who already has a job at this spot comes
+    first (one visit to the site instead of two, ADR-025), then lowest cost, then
+    lowest id.
     """
     strategy = get_strategy(config.scoring_strategy)
     by_id = {t.id: t for t in technicians}
 
     scored = []
     for candidate in candidates:
+        tech = by_id[candidate.technician_id]
         deadline = deadline_for(job, candidate.travel_minutes, config)
         slack = (deadline - candidate.estimated_arrival).total_seconds() / 60
         risk = risk_score(slack, config.at_risk_minutes)
         cost = strategy.cost(
             travel_minutes=candidate.travel_minutes,
-            assigned_count=by_id[candidate.technician_id].assigned_count,
+            assigned_count=tech.assigned_count,
             risk=risk,
             config=config,
         )
@@ -158,11 +167,18 @@ def score_candidates(
                 sla_label=sla_label(slack, config.at_risk_minutes),
                 risk=risk,
                 cost=cost,
+                same_site=tech.assigned_count > 0
+                and candidate.travel_minutes <= SAME_SITE_MINUTES,
             )
         )
     return tuple(
         sorted(
             scored,
-            key=lambda s: (s.sla_label == SlaLabel.BREACH, s.cost, s.technician_id),
+            key=lambda s: (
+                s.sla_label == SlaLabel.BREACH,
+                not s.same_site,
+                s.cost,
+                s.technician_id,
+            ),
         )
     )

@@ -240,6 +240,74 @@ def test_a_job_that_ended_in_the_past_does_not_hold_the_technician(org, skill):
     assert view.assigned_count == 1
 
 
+HOUR = datetime.timedelta(hours=1)
+
+
+def window_job(org, skill, technician, start, hours=2, minutes=60, **fields):
+    """A job assigned by hand: it has a window but no arrival time from the planner."""
+    return make_job(
+        org,
+        skill,
+        is_urgent=False,
+        status=JobStatus.ASSIGNED,
+        technician=technician,
+        slot_start=start,
+        slot_end=start + hours * HOUR,
+        estimated_duration_minutes=minutes,
+        **fields,
+    )
+
+
+def test_a_job_assigned_by_hand_still_holds_the_technician_for_its_window(org, skill):
+    """The manual-test bug: a 2-4 pm job assigned by hand was ignored, so a new job was
+    planned from the workstation at 3 pm."""
+    technician = tech_of(org, skill)
+    now = NOW + 7 * HOUR  # 3 pm in Chicago
+    job = window_job(
+        org, skill, technician, NOW + 6 * HOUR, lat=30.36, lng=-97.65, minutes=60
+    )
+    assert job.estimated_arrival is None
+    view = view_of(technician, org, [job], now=now)
+    assert view.free_at == now + HOUR  # busy for its hour, counted from now
+    assert (view.position.lat, view.position.lng) == (30.36, -97.65)
+    assert view.assigned_count == 1
+
+
+def test_a_hand_assigned_job_in_the_future_pushes_free_at_to_its_end(org, skill):
+    technician = tech_of(org, skill)
+    job = window_job(org, skill, technician, NOW + 4 * HOUR, minutes=90)
+    view = view_of(technician, org, [job])
+    assert view.free_at == NOW + 4 * HOUR + datetime.timedelta(minutes=90)
+
+
+def test_two_hand_assigned_jobs_run_one_after_the_other_not_both_from_now(org, skill):
+    technician = tech_of(org, skill)
+    first = window_job(org, skill, technician, NOW, hours=4, minutes=60, lat=30.31)
+    second = window_job(org, skill, technician, NOW, hours=4, minutes=60, lat=30.32)
+    view = view_of(technician, org, [first, second])
+    assert view.free_at == NOW + 2 * HOUR
+    assert view.position.lat == 30.32  # the one finished last (id order breaks the tie)
+
+
+def test_a_hand_assigned_job_whose_window_has_shut_does_not_hold_anyone(org, skill):
+    technician = tech_of(org, skill)
+    job = window_job(org, skill, technician, NOW - 5 * HOUR, hours=2, minutes=60)
+    view = view_of(technician, org, [job])
+    assert view.free_at == NOW
+    assert view.assigned_count == 1
+
+
+def test_an_ongoing_job_is_counted_from_when_the_technician_arrived(org, skill):
+    technician = tech_of(org, skill)
+    job = window_job(
+        org, skill, technician, NOW - HOUR, minutes=120, arrived_at=NOW - HOUR
+    )
+    job.status = JobStatus.ONGOING
+    job.save()
+    view = view_of(technician, org, [job])
+    assert view.free_at == NOW + HOUR
+
+
 def test_an_urgent_jobs_clock_starts_when_the_planned_day_opens(org, skill):
     job = make_job(org, skill)  # urgent, created "now"
     opens = job.created_at + datetime.timedelta(days=1)

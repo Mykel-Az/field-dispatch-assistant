@@ -136,11 +136,11 @@ export default function PlanPage() {
     };
   }, [date, reloads]);
 
-  async function run() {
+  async function run(replan = false) {
     setRunning(true);
     setFailure(null);
     try {
-      const ran = await generateSchedule(date);
+      const ran = await generateSchedule(date, replan);
       // A run answers for the jobs it just looked at. Show the whole day instead, so
       // running twice does not make the first run's jobs vanish from the page.
       const whole = await fetchSchedule(date).catch(() => ran);
@@ -157,7 +157,8 @@ export default function PlanPage() {
       <h1 className="mb-1 text-2xl font-semibold">Plan the day</h1>
       <p className={`${ui.muted} mb-4`}>
         Assigns the day’s unassigned jobs to technicians and explains each choice. Jobs that are
-        already assigned stay with their technician.
+        already assigned stay with their technician, and new jobs are planned around them.
+        After changing a setting, use Plan again to redo the planner’s own choices.
       </p>
 
       <form
@@ -181,6 +182,15 @@ export default function PlanPage() {
         </label>
         <button type="submit" className={ui.btn} disabled={running || loading || !date}>
           {running ? 'Planning…' : 'Run plan'}
+        </button>
+        <button
+          type="button"
+          className={ui.btnOutline}
+          disabled={running || loading || !date}
+          onClick={() => void run(true)}
+          title="Return the jobs the planner placed (not ones you assigned by hand, or started) to the queue and plan them again"
+        >
+          Plan again
         </button>
       </form>
 

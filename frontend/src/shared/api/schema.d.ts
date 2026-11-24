@@ -353,7 +353,9 @@ export interface paths {
          * @description POST /schedule/generate/: plan the organization's unassigned jobs for one day.
          *
          *     Assigns what it can, stores a reason for every decision, and reports jobs that
-         *     could not be planned. Running it again only touches what is still unassigned.
+         *     could not be planned. Running it again only touches what is still unassigned,
+         *     unless `replan` is true: then jobs the planner placed (not those assigned by hand
+         *     or already started) are planned again first.
          */
         post: operations["schedule_generate_create"];
         delete?: never;
@@ -722,6 +724,8 @@ export interface components {
             readonly reason: string;
             readonly changed_by: components["schemas"]["JobActor"] | null;
             readonly source: components["schemas"]["SourceEnum"];
+            readonly kind: components["schemas"]["KindEnum"];
+            readonly changes: unknown;
             /** Format: date-time */
             readonly created_at: string;
         };
@@ -750,6 +754,12 @@ export interface components {
         JobUnassign: {
             version: number;
         };
+        /**
+         * @description * `status` - Status change
+         *     * `edit` - Edit
+         * @enum {string}
+         */
+        KindEnum: "status" | "edit";
         Login: {
             /** Format: email */
             email: string;
@@ -884,6 +894,12 @@ export interface components {
         PatchedUserUpdate: {
             full_name?: string;
         };
+        /**
+         * @description * `planner` - planner
+         *     * `manual` - manual
+         * @enum {string}
+         */
+        PlacedByEnum: "planner" | "manual";
         /** @description One structured reason: a code and the numbers behind it. */
         PlanReason: {
             code: string;
@@ -895,12 +911,13 @@ export interface components {
             job_id: number;
             technician_id: number;
             /** Format: date-time */
-            estimated_arrival: string;
+            estimated_arrival: string | null;
             sla_label: string;
             /** Format: double */
             slack_minutes: number;
             reasons: components["schemas"]["PlanReason"][];
             sentence: string;
+            placed_by: components["schemas"]["PlacedByEnum"];
         };
         /**
          * @description * `low` - Low
@@ -927,6 +944,8 @@ export interface components {
         ScheduleGenerate: {
             /** Format: date */
             date?: string;
+            /** @default false */
+            replan: boolean;
         };
         ScheduleResult: {
             /** Format: date */

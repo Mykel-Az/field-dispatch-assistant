@@ -323,10 +323,13 @@ def test_jobs_the_planner_has_not_seen_yet_are_not_listed(org, tech):
     assert [s.job_id for s in result.skipped] == [waiting_without_location.pk]
 
 
-def test_a_job_assigned_by_hand_is_not_part_of_the_plan(org, dispatcher_a, tech):
+def test_a_job_assigned_by_hand_is_part_of_the_day_and_marked_by_hand(
+    org, dispatcher_a, tech
+):
     j = job(org)
     job_service.transition(fresh(j), "assigned", dispatcher_a, technician=tech)
-    assert read(org).assigned == []
+    (stop,) = read(org).assigned
+    assert stop.job_id == j.pk and stop.placed_by == "manual"
 
 
 def test_an_ongoing_job_stays_in_the_plan(org, dispatcher_a, tech):

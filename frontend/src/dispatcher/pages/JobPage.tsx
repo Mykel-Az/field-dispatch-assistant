@@ -6,6 +6,7 @@ import { CATEGORY_LABEL, type JobDetail } from '../../shared/api/models';
 import StatusBadge from '../../shared/components/StatusBadge';
 import JobTags from '../../shared/components/JobTags';
 import { historyActor } from '../../shared/historyActor';
+import { editLines } from '../../shared/historyEdits';
 import { formatStamp, formatWhen, placeLine } from '../../shared/jobTime';
 import { CANCELABLE, isJobStatus, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
@@ -34,6 +35,24 @@ function History({ job }: { job: JobDetail }) {
       <h2 id="history-heading" className="mb-3 text-lg font-bold">History</h2>
       <ol className="grid gap-4">
         {[...job.history].reverse().map((h) => {
+          if (h.kind === 'edit') {
+            return (
+              <li key={h.id} className="border-l-2 border-dashed border-line pl-4">
+                <div className="font-semibold">Edited</div>
+                <ul className="mt-1 grid gap-0.5 text-sm">
+                  {editLines(h.changes).map((line) => (
+                    <li key={line.field}>
+                      <span className="font-medium">{line.label}:</span>{' '}
+                      <span className="text-ink-muted">{line.from}</span> → {line.to}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-sm text-ink-muted">
+                  {historyActor(h)} · {formatStamp(h.created_at)}
+                </div>
+              </li>
+            );
+          }
           const to = isJobStatus(h.to_status) ? STATUS_META[h.to_status].label : h.to_status;
           const from = h.from_status && isJobStatus(h.from_status) ? STATUS_META[h.from_status].label : '';
           return (

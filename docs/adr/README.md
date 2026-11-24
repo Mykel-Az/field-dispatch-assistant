@@ -29,3 +29,5 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [022](022-daily-limit-is-a-hard-cap.md) | The daily limit is a hard cap for planned work |
 | [023](023-plan-in-deadline-order-and-never-late-by-choice.md) | Plan in deadline order; never choose a late technician when another is on time |
 | [024](024-timezone-change-rule.md) | The time zone cannot change while jobs are Assigned or Ongoing |
+| [025](025-same-site-jobs-go-to-one-technician.md) | A technician already on site is preferred for another job there |
+| [026](026-the-plan-respects-jobs-already-on-the-day.md) | New jobs are planned around what a technician already has; Plan again |

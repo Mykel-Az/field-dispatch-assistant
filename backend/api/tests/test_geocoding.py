@@ -182,3 +182,59 @@ def test_cache_hits_skip_the_throttle():
     cached.geocode("1 Main St", "78701")
     cached.geocode("1 Main St", "78701")
     assert len(waits) == 1
+
+
+# ---- what is sent to Nominatim (real addresses that failed in manual testing) ----
+@pytest.mark.parametrize(
+    ("address", "zip_code", "sent"),
+    [
+        # the four office addresses from the manual test, ZIP typed in the address line
+        (
+            "1400 Lavaca St, Ste 100, Austin, TX 78701",
+            "78701",
+            "1400 Lavaca St, Austin, TX, 78701",
+        ),
+        (
+            "11044 Research Blvd, Suite C-120, Austin, TX 78759",
+            "78759",
+            "11044 Research Blvd, Austin, TX, 78759",
+        ),
+        (
+            "6001 W Parmer Ln, Ste 370 # 290, Austin, TX 78727",
+            "78727",
+            "6001 W Parmer Ln, Austin, TX, 78727",
+        ),
+        (
+            "1600 E 7th St, Austin, TX 78702",
+            "78702",
+            "1600 E 7th St, Austin, TX, 78702",
+        ),
+        # ZIP only in its own field: unchanged
+        ("1600 E 7th St, Austin, TX", "78702", "1600 E 7th St, Austin, TX, 78702"),
+        # a unit without a comma, and a ZIP+4
+        (
+            "22 Oak Dr Apt 4B, Austin, TX 78704-1234",
+            "",
+            "22 Oak Dr, Austin, TX, 78704-1234",
+        ),
+        ("500 Congress Ave #12", "78701", "500 Congress Ave, 78701"),
+        # nothing to remove
+        ("12 Main St", "", "12 Main St"),
+        ("", "78701", "78701"),
+        # a street that merely contains a unit-like word is left alone
+        ("5 Suite Rd", "78701", "5 Suite Rd, 78701"),
+    ],
+)
+def test_the_query_has_no_unit_and_the_zip_only_once(address, zip_code, sent):
+    from geocoding.nominatim import search_text
+
+    assert search_text(address, zip_code) == sent
+
+
+def test_the_url_uses_the_cleaned_query():
+    from geocoding.nominatim import NominatimGeocoder
+
+    url = NominatimGeocoder(base_url="http://x/search").build_url(
+        "1400 Lavaca St, Ste 100, Austin, TX 78701", "78701"
+    )
+    assert "Ste" not in url and url.count("78701") == 1

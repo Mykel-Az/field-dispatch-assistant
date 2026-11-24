@@ -366,6 +366,11 @@ class Job(AddressMixin, TenantScopedModel):
         return f"{self.title} ({self.status})"
 
 
+class HistoryKind(models.TextChoices):
+    STATUS = "status", "Status change"
+    EDIT = "edit", "Edit"
+
+
 class HistorySource(models.TextChoices):
     """Who made a status change: a person on a screen, or the planner acting for
     the person who ran it. `changed_by` stays that person either way."""
@@ -375,7 +380,12 @@ class HistorySource(models.TextChoices):
 
 
 class JobStatusHistory(TenantScopedModel):
-    """Append-only (invariant 15): one row per status change, never edited."""
+    """Append-only (invariant 15): one row per status change or edit, never edited.
+
+    A status row has `from_status` and `to_status`. An edit row (`kind="edit"`) leaves
+    both at the job's status and lists what changed in `changes`:
+    `{"field": [old, new]}` (ADR-004 amendment).
+    """
 
     job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="history")
     from_status = models.CharField(max_length=20, blank=True)
@@ -390,6 +400,10 @@ class JobStatusHistory(TenantScopedModel):
     source = models.CharField(
         max_length=10, choices=HistorySource.choices, default=HistorySource.MANUAL
     )
+    kind = models.CharField(
+        max_length=10, choices=HistoryKind.choices, default=HistoryKind.STATUS
+    )
+    changes = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = AppendOnlyQuerySet.as_manager()

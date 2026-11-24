@@ -444,7 +444,7 @@ class JobViewSet(
         data = dict(serializer.validated_data)
         try:
             updated = job_service.update_job(
-                job=job, client_version=data.pop("version"), **data
+                job=job, client_version=data.pop("version"), actor=request.user, **data
             )
         except job_service.JobNotEditable:
             raise Conflict(
@@ -542,6 +542,7 @@ class JobViewSet(
                 lat=data["lat"],
                 lng=data["lng"],
                 client_version=data["version"],
+                actor=request.user,
             )
         except job_service.JobNotEditable:
             raise Conflict(
@@ -559,7 +560,9 @@ class JobViewSet(
         serializer.is_valid(raise_exception=True)
         try:
             updated = job_service.retry_geocode(
-                job=job, client_version=serializer.validated_data["version"]
+                job=job,
+                client_version=serializer.validated_data["version"],
+                actor=request.user,
             )
         except job_service.JobNotEditable:
             raise Conflict(
@@ -629,7 +632,9 @@ class ScheduleGenerateView(APIView):
     """POST /schedule/generate/: plan the organization's unassigned jobs for one day.
 
     Assigns what it can, stores a reason for every decision, and reports jobs that
-    could not be planned. Running it again only touches what is still unassigned.
+    could not be planned. Running it again only touches what is still unassigned,
+    unless `replan` is true: then jobs the planner placed (not those assigned by hand
+    or already started) are planned again first.
     """
 
     permission_classes = [IsDispatcher]
@@ -647,6 +652,7 @@ class ScheduleGenerateView(APIView):
                 organization=request.user.organization,
                 actor=request.user,
                 plan_date=body.validated_data.get("date"),
+                replan=body.validated_data["replan"],
             )
         except OrganizationNotConfigured as error:
             raise Conflict(str(error), code="organization_not_configured") from None

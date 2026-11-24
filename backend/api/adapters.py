@@ -95,14 +95,43 @@ def job_to_view(job: Job, *, urgent_clock_start: datetime | None = None) -> JobV
     )
 
 
-def _busy_until(job: Job) -> datetime | None:
-    """When a job already on a technician's day ends, if we can tell."""
-    started = (
-        job.arrived_at if job.status == JobStatus.ONGOING else job.estimated_arrival
+def _planned_start(job: Job) -> datetime | None:
+    """When an Assigned job is expected to begin: the planner's arrival time, else the
+    start of the customer's window (a job assigned by hand has no arrival time yet)."""
+    return job.estimated_arrival or job.slot_start
+
+
+def _busy_chain(workload: Iterable[Job], now: datetime) -> tuple[datetime, Job | None]:
+    """When a technician finishes everything already on their day, and with which job.
+
+    Jobs are walked in the order they will happen: Ongoing first, then Assigned ones
+    by their expected start. An Assigned job cannot start before the one before it
+    ends, or before now, so two jobs assigned by hand do not both start "now". The
+    job a technician finishes last is where they will be.
+    """
+    ordered = sorted(
+        workload,
+        key=lambda j: (
+            j.status != JobStatus.ONGOING,
+            _planned_start(j) or now,
+            j.pk,
+        ),
     )
-    if started is None:
-        return None
-    return started + timedelta(minutes=job.estimated_duration_minutes)
+    cursor, last = now, None
+    for job in ordered:
+        duration = timedelta(minutes=job.estimated_duration_minutes)
+        if job.status == JobStatus.ONGOING and job.arrived_at is not None:
+            start = job.arrived_at
+        else:
+            planned = _planned_start(job)
+            window_open = job.slot_end is not None and job.slot_end > now
+            if planned is not None and planned + duration <= now and not window_open:
+                continue  # its time has passed and its window is shut: not holding anyone
+            start = max(cursor, planned or cursor)
+        end = start + duration
+        if end > cursor:
+            cursor, last = end, job
+    return cursor, last
 
 
 def technician_to_view(
@@ -115,17 +144,20 @@ def technician_to_view(
 ) -> TechView:
     """A technician as the engine sees them on `plan_date`.
 
-    `workload` is their Assigned and Ongoing jobs for that day. TIME shortcut:
-    those jobs only push `free_at` and `position` forward; they are not fixed
-    anchors the new jobs can fit around.
+    `workload` is their Assigned and Ongoing jobs for that day, by hand or by the
+    planner. TIME shortcut: those jobs only push `free_at` and `position` forward
+    (the technician is treated as busy until the last one ends); they are not fixed
+    anchors the new jobs can fit around, so a gap before a later job is not used
+    until gap insertion (S3c).
     """
     tz = organization.timezone
     jobs = list(workload)
-    free_at, position = now, _location(organization)
-    for job in jobs:
-        end = _busy_until(job)
-        if end is not None and end > free_at and job.lat is not None:
-            free_at, position = end, _location(job)
+    free_at, last = _busy_chain(jobs, now)
+    position = (
+        _location(last)
+        if last is not None and last.lat is not None
+        else _location(organization)
+    )
     user = technician.user
     return TechView(
         id=technician.pk,

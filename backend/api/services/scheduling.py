@@ -36,11 +36,14 @@ USABLE_LOCATION = (GeocodeStatus.OK, GeocodeStatus.APPROXIMATE, GeocodeStatus.MA
 class PlannedJob:
     job_id: int
     technician_id: int
-    estimated_arrival: datetime
+    # None for a job a dispatcher assigned by hand: nobody has worked out when the
+    # technician will get there.
+    estimated_arrival: datetime | None
     sla_label: str
     slack_minutes: float
     reasons: list[dict]
     sentence: str
+    placed_by: str = "planner"  # "planner" or "manual"
 
 
 @dataclass(frozen=True)
@@ -78,11 +81,18 @@ def generate_schedule(
     actor,
     plan_date: date | None = None,
     clock: Clock | None = None,
+    replan: bool = False,
 ) -> ScheduleResult:
     """Assign the organization's unassigned jobs for `plan_date` (default: today there).
 
     Safe to run twice: only unassigned jobs are touched, and jobs that are already
-    assigned stay put (invariant 12); they only count as the technician's load.
+    assigned stay put (invariant 12); they count as the technician's load and as
+    time the technician is busy (`adapters.technician_to_view`).
+
+    With `replan=True` the jobs the planner itself placed, and that have not started,
+    are first returned to the queue and planned again, so a changed setting (the
+    strategy, the daily limit) can take effect. Jobs a person assigned by hand and
+    jobs under way stay (ADR-026).
     Raises `OrganizationNotConfigured` when the organization has no location or hours.
     """
     config = org_to_config(organization)
@@ -94,6 +104,8 @@ def generate_schedule(
         # One planner run per organization at a time: a second run waits here, then
         # reads the loads the first one saved instead of planning from a stale picture.
         Organization.objects.select_for_update().get(pk=organization.pk)
+        if replan:
+            _release_planner_placements(organization, plan_date, actor)
         # Lock the candidate jobs too, in id order: no job can be claimed twice.
         candidates = list(
             Job.objects.for_organization(organization)
@@ -222,8 +234,9 @@ def current_schedule(
     Same shape as `generate_schedule`, built from the stored explanations, so the
     plan page can show the day after a reload and after other people's runs. It
     changes nothing. It lists:
-      - assigned: Assigned and Ongoing jobs the planner placed (those it gave an
-        arrival time and an explanation; a job assigned by hand has neither yet);
+      - assigned: every Assigned and Ongoing job on a technician's day. Ones the
+        planner placed carry its arrival time and explanation; ones assigned by hand
+        have neither and say `placed_by="manual"`;
       - unassigned: jobs the planner looked at and could not place, with the reasons;
       - skipped: jobs with no usable location (worked out live, as in a run).
     Unassigned jobs the planner has not seen yet are not listed: they wait for a run.
@@ -270,7 +283,46 @@ def current_schedule(
                     stored.get("sentence", ""),
                 )
             )
+        else:
+            # Assigned by hand (no explanation, no arrival time): still on the
+            # technician's day, so the page must show it (ADR-026).
+            assigned.append(
+                PlannedJob(
+                    job.pk,
+                    job.technician_id,
+                    job.estimated_arrival,
+                    "unknown",
+                    0.0,
+                    [],
+                    "",
+                    placed_by="manual",
+                )
+            )
     return ScheduleResult(plan_date, assigned, unassigned, skipped)
+
+
+def _release_planner_placements(organization, plan_date: date, actor) -> None:
+    """Return the planner's own not-yet-started placements for the day to the queue."""
+    placed = (
+        Job.objects.for_organization(organization)
+        .select_for_update()
+        .filter(
+            status=JobStatus.ASSIGNED,
+            scheduled_date=plan_date,
+            technician__isnull=False,
+        )
+        .order_by("id")
+    )
+    for job in placed:
+        last = job.history.filter(to_status=JobStatus.ASSIGNED).order_by("-id").first()
+        if last is not None and last.source == "planner":
+            transition(
+                job,
+                lc.UNASSIGNED,
+                actor,
+                reason="Planned again",
+                source="planner",
+            )
 
 
 def _is_located(job: Job) -> bool:

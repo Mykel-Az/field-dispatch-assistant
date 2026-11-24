@@ -608,7 +608,9 @@ paths:
         POST /schedule/generate/: plan the organization's unassigned jobs for one day.
 
         Assigns what it can, stores a reason for every decision, and reports jobs that
-        could not be planned. Running it again only touches what is still unassigned.
+        could not be planned. Running it again only touches what is still unassigned,
+        unless `replan` is true: then jobs the planner placed (not those assigned by hand
+        or already started) are planned again first.
       tags:
       - schedule
       requestBody:
@@ -1406,15 +1408,23 @@ components:
           allOf:
           - $ref: '#/components/schemas/SourceEnum'
           readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/KindEnum'
+          readOnly: true
+        changes:
+          readOnly: true
         created_at:
           type: string
           format: date-time
           readOnly: true
       required:
       - changed_by
+      - changes
       - created_at
       - from_status
       - id
+      - kind
       - reason
       - source
       - to_status
@@ -1476,6 +1486,14 @@ components:
           minimum: 1
       required:
       - version
+    KindEnum:
+      enum:
+      - status
+      - edit
+      type: string
+      description: |-
+        * `status` - Status change
+        * `edit` - Edit
     Login:
       type: object
       properties:
@@ -1818,6 +1836,14 @@ components:
         full_name:
           type: string
           maxLength: 150
+    PlacedByEnum:
+      enum:
+      - planner
+      - manual
+      type: string
+      description: |-
+        * `planner` - planner
+        * `manual` - manual
     PlanReason:
       type: object
       description: 'One structured reason: a code and the numbers behind it.'
@@ -1840,6 +1866,7 @@ components:
         estimated_arrival:
           type: string
           format: date-time
+          nullable: true
         sla_label:
           type: string
         slack_minutes:
@@ -1851,9 +1878,12 @@ components:
             $ref: '#/components/schemas/PlanReason'
         sentence:
           type: string
+        placed_by:
+          $ref: '#/components/schemas/PlacedByEnum'
       required:
       - estimated_arrival
       - job_id
+      - placed_by
       - reasons
       - sentence
       - sla_label
@@ -1907,6 +1937,9 @@ components:
         date:
           type: string
           format: date
+        replan:
+          type: boolean
+          default: false
     ScheduleResult:
       type: object
       properties:

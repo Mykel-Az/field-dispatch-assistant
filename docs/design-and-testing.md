@@ -200,7 +200,7 @@ self-hosted one, both behind the same `Geocoder` protocol (ADR-007).
 | **Concurrency** | pytest + threads | `test_job_edit_race`, `test_last_head_race`, `test_scheduling_race`, `test_technician_race` | two people acting at once: stale edits get 409, the last head dispatcher cannot be removed, two plans do not double-book, one Ongoing job per technician | **Postgres** (skipped on SQLite) |
 | **Architecture and build gates** | import-linter, `makemigrations --check`, `check --deploy`, `collectstatic` | CI | the engine stays framework-free; no model change without a migration; production settings are deployable | nothing |
 | **Static quality** | ruff (lint + format), TypeScript `tsc`, ESLint | CI (ruff also in pre-commit) | style, type errors, React hook mistakes | nothing |
-| **Frontend** | vitest + jsdom, react-dom | `frontend/src/**/*.test.ts(x)` (174 tests) | the logic behind screens (models, filters, time formatting, API client errors) and component behaviour (forms, dialogs, drawer focus, polling, technician actions). No mocking library for the DOM; the API client is mocked | nothing |
+| **Frontend** | vitest + jsdom, react-dom | `frontend/src/**/*.test.ts(x)` (182 tests) | the logic behind screens (models, filters, time formatting, API client errors) and component behaviour (forms, dialogs, drawer focus, polling, technician actions). No mocking library for the DOM; the API client is mocked | nothing |
 | **Manual, in a real browser** | Playwright scripts run by hand | not in the repo's CI | each page at 360, 768 and 1280 px: overflow, tap targets, the real login and flows (results recorded in the responsive section) | a running app |
 
 Why this shape: the engine is where wrong answers are most costly and where
@@ -230,8 +230,8 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 2)
-Backend 681 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 174. Per-file counts: `pytest --collect-only -q`.
+Backend 728 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 182. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.
@@ -273,13 +273,13 @@ engine (164 tests, none at Sprint 1 close), planning service and API, technician
 endpoints, priority, any-time jobs, time zone rules, and the plan, technician and
 layout screens.
 
-<!-- ## Gaps and known limits
+## Gaps and known limits
 - The planner is greedy: no gap insertion until Sprint 3 (`available_slots`);
   sequencing and replanning are Sprint 3.
 - Frontend tests use jsdom, so layout, focus rings and real touch are checked by
   hand, not by CI.
 - The time zone rule has a small race window (ADR-024).
-- Real Nominatim responses are saved by a script run by hand; CI never calls it. -->
+- Real Nominatim responses are saved by a script run by hand; CI never calls it.
 
 ## Responsive layout (S2-9)
 One rule: the app works at 360px wide first and gains room, it is not shrunk down

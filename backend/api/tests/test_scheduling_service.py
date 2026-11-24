@@ -336,10 +336,23 @@ def test_jobs_the_planner_has_not_seen_yet_are_not_listed(org, tech):
     assert [s.job_id for s in result.skipped] == [waiting_without_location.pk]
 
 
-def test_a_job_assigned_by_hand_is_not_part_of_the_plan(org, dispatcher_a, tech):
+def test_a_job_assigned_by_hand_is_listed_and_marked_as_by_hand(
+    org, dispatcher_a, tech
+):
+    """It used to vanish from the plan page: it has no arrival time or explanation."""
     j = job(org)
     job_service.transition(fresh(j), "assigned", dispatcher_a, technician=tech)
-    assert read(org).assigned == []
+    (stop,) = read(org).assigned
+    assert (stop.job_id, stop.technician_id) == (j.pk, tech.pk)
+    assert stop.placed_by == "manual" and stop.estimated_arrival is None
+    assert stop.reasons == [] and stop.sentence == ""
+
+
+def test_a_planned_job_is_marked_as_the_planners(org, dispatcher_a, tech):
+    job(org)
+    run(org, dispatcher_a)
+    (stop,) = read(org).assigned
+    assert stop.placed_by == "planner" and stop.estimated_arrival is not None
 
 
 def test_an_ongoing_job_stays_in_the_plan(org, dispatcher_a, tech):
@@ -470,7 +483,7 @@ def _second_tech(org, hvac):
     return technician
 
 
-def _overlapping_jobs(org, hvac):
+def _overlapping_jobs(org, hvac, apart=False):
     long_job = job(org, title="Rooftop", estimated_duration_minutes=180)
     short_job = job(
         org,
@@ -479,6 +492,8 @@ def _overlapping_jobs(org, hvac):
         slot_end=at(19),
         estimated_duration_minutes=60,
         priority="normal",
+        # `apart`: another place. At the same place one technician takes both (ADR-025).
+        **({"lat": 30.38, "lng": -97.60} if apart else {}),
     )
     for made in (long_job, short_job):
         made.acceptable_skills.add(hvac)
@@ -489,7 +504,7 @@ def test_overlapping_fixed_jobs_go_to_different_technicians_when_there_are_two(
     org, dispatcher_a, tech, hvac
 ):
     other = _second_tech(org, hvac)
-    long_job, short_job = _overlapping_jobs(org, hvac)
+    long_job, short_job = _overlapping_jobs(org, hvac, apart=True)
     result = run(org, dispatcher_a)
     by_job = {p.job_id: p for p in result.assigned}
     assert by_job[long_job.pk].technician_id != by_job[short_job.pk].technician_id
@@ -519,3 +534,119 @@ def test_with_one_technician_two_tight_windows_leave_one_late_but_flagged(
     result = run(org, dispatcher_a)
     assert len(result.assigned) == 2 and not result.unassigned
     assert "breach" in {p.sla_label for p in result.assigned}  # shown, never hidden
+
+
+# ---- work already on a technician's day (ADR-026) ------------------------------
+def test_a_new_job_is_planned_after_a_job_assigned_by_hand_not_from_the_workstation(
+    org, dispatcher_a, tech
+):
+    """The manual-test bug: a 2-4 pm job assigned by hand was ignored, so an urgent
+    job was planned from the workstation as if the technician were free."""
+    hand = job(
+        org,
+        slot_start=at(15),
+        slot_end=at(17),
+        estimated_duration_minutes=120,
+        lat=30.36,
+        lng=-97.65,
+    )
+    job_service.transition(fresh(hand), "assigned", dispatcher_a, technician=tech)
+    urgent = job(
+        org,
+        is_urgent=True,
+        slot_start=None,
+        slot_end=None,
+        estimated_duration_minutes=60,
+    )
+    run(org, dispatcher_a)
+    arrival = fresh(urgent).estimated_arrival
+    assert arrival is not None and arrival >= at(17)  # after the hand-assigned job ends
+    assert fresh(urgent).technician_id == tech.pk
+
+
+def test_travel_to_the_new_job_starts_from_the_last_job_not_the_workstation(
+    org, dispatcher_a, tech
+):
+    far = job(
+        org,
+        slot_start=at(15),
+        slot_end=at(17),
+        estimated_duration_minutes=120,
+        lat=30.40,
+        lng=-97.60,
+    )
+    job_service.transition(fresh(far), "assigned", dispatcher_a, technician=tech)
+    at_the_far_job = job(
+        org,
+        is_urgent=True,
+        slot_start=None,
+        slot_end=None,
+        lat=30.40,
+        lng=-97.60,
+    )
+    run(org, dispatcher_a)
+    # Same place as the job they are finishing: no drive, so they arrive when it ends.
+    assert fresh(at_the_far_job).estimated_arrival == at(17)
+
+
+def test_two_jobs_at_one_place_go_to_one_technician_and_the_sentence_says_so(
+    org, dispatcher_a, tech, hvac
+):
+    _second_tech(org, hvac)
+    first, second = job(org), job(org)  # same coordinates
+    run(org, dispatcher_a)
+    assert fresh(first).technician_id == fresh(second).technician_id
+    sentences = [fresh(j).plan_explanation["sentence"] for j in (first, second)]
+    assert any("already has a job at this location" in x for x in sentences)
+
+
+def test_replan_returns_the_planners_jobs_to_the_queue_and_plans_them_again(
+    org, dispatcher_a, tech
+):
+    org.max_jobs_per_tech_per_day = 2
+    org.save()
+    a, b = job(org), job(org)
+    run(org, dispatcher_a)
+    assert {fresh(a).status, fresh(b).status} == {JobStatus.ASSIGNED}
+    org.max_jobs_per_tech_per_day = 1
+    org.save()
+    run(org, dispatcher_a)  # a normal run leaves assigned jobs alone
+    assert {fresh(a).status, fresh(b).status} == {JobStatus.ASSIGNED}
+    result = run(org, dispatcher_a, replan=True)
+    statuses = sorted([fresh(a).status, fresh(b).status])
+    assert statuses == [JobStatus.ASSIGNED, JobStatus.UNASSIGNED]
+    assert len(result.assigned) == 1 and len(result.unassigned) == 1
+
+
+def test_replan_leaves_jobs_assigned_by_hand_and_jobs_under_way(
+    org, dispatcher_a, tech
+):
+    by_hand = job(org)
+    job_service.transition(fresh(by_hand), "assigned", dispatcher_a, technician=tech)
+    started = job(org)
+    run(org, dispatcher_a)
+    job_service.transition(fresh(started), "ongoing", dispatcher_a)
+    before = JobStatusHistory.objects.filter(job__in=[by_hand, started]).count()
+    run(org, dispatcher_a, replan=True)
+    assert fresh(by_hand).status == JobStatus.ASSIGNED
+    assert fresh(by_hand).technician_id == tech.pk
+    assert fresh(started).status == JobStatus.ONGOING
+    assert JobStatusHistory.objects.filter(job__in=[by_hand, started]).count() == before
+
+
+def test_replan_writes_planner_history_rows_run_by_the_dispatcher(
+    org, dispatcher_a, tech
+):
+    j = job(org)
+    run(org, dispatcher_a)
+    run(org, dispatcher_a, replan=True)
+    rows = list(JobStatusHistory.objects.filter(job=j).order_by("id"))
+    assert [r.to_status for r in rows] == ["assigned", "unassigned", "assigned"]
+    assert rows[1].source == "planner" and rows[1].changed_by == dispatcher_a
+    assert rows[1].reason == "Planned again"
+
+
+def test_replan_on_a_day_with_nothing_placed_is_just_a_run(org, dispatcher_a, tech):
+    j = job(org)
+    run(org, dispatcher_a, replan=True)
+    assert fresh(j).status == JobStatus.ASSIGNED
