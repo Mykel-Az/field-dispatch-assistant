@@ -230,7 +230,7 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 2)
-Backend 728 tests (including 8 that need Postgres or saved Nominatim responses),
+Backend 739 tests (including 8 that need Postgres or saved Nominatim responses),
 frontend 182. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)

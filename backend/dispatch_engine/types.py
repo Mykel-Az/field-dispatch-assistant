@@ -65,6 +65,25 @@ class JobView:
 
 
 @dataclass(frozen=True, slots=True)
+class Commitment:
+    """A stretch of a technician's day that is already taken: where and when.
+
+    Existing Assigned and Ongoing jobs are commitments. New jobs fit in the gaps
+    between them (ADR-027); they never move a commitment.
+    """
+
+    start: datetime
+    end: datetime
+    location: Location
+
+    def __post_init__(self):
+        for name in ("start", "end"):
+            _require_aware(name, getattr(self, name))
+        if self.end < self.start:
+            raise ValueError("a commitment cannot end before it starts")
+
+
+@dataclass(frozen=True, slots=True)
 class TechView:
     id: int
     label: str
@@ -75,6 +94,11 @@ class TechView:
     free_at: datetime
     position: Location
     assigned_count: int
+    # Fixed anchors the day is built around (ADR-027), earliest first. `free_at` and
+    # `position` are where the technician is after the last of them. `home` is where
+    # they start the day; None means "at `position`", right when there are no commitments.
+    commitments: tuple[Commitment, ...] = ()
+    home: Location | None = None
 
     def __post_init__(self):
         for name in ("shift_start", "shift_end", "free_at"):

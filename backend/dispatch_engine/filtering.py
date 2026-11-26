@@ -21,20 +21,48 @@ from .types import (
 
 
 def _arrival(
-    job: JobView, tech: TechView, travel_minutes: float, now: datetime
-) -> datetime:
-    """When this technician would reach the job.
+    job: JobView,
+    tech: TechView,
+    distance: DistanceProvider,
+    now: datetime,
+) -> tuple[datetime, float]:
+    """When this technician would reach the job, and the drive that takes.
 
-    They cannot leave before now, before they are free, or before their shift
-    starts. For a job with a slot, the estimated arrival is never earlier than the
-    slot opening: the customer is only expected from then. A job without a slot is
-    planned as early as the technician can reach it.
+    They cannot leave before now or before their shift starts. For a job with a slot,
+    the estimated arrival is never earlier than the slot opening: the customer is only
+    expected from then. A job without a slot is planned as early as possible.
+
+    The earliest place wins. Before each existing commitment the job fits only if the
+    technician can get there, do the job, and drive on to the commitment before it
+    starts (ADR-027); otherwise the search moves past that commitment. After the last
+    commitment the technician is at `position`, free from `free_at`.
     """
-    start = max(now, tech.free_at, tech.shift_start)
-    arrival = start + timedelta(minutes=travel_minutes)
-    if job.slot_start is not None:
-        arrival = max(arrival, job.slot_start)
-    return arrival
+    cursor_time = max(now, tech.shift_start)
+    cursor_at = tech.home or tech.position
+    duration = timedelta(minutes=job.duration_minutes)
+
+    def reach(from_at, from_time):
+        travel = distance.travel_minutes(from_at, job.location)
+        arrival = from_time + timedelta(minutes=travel)
+        if job.slot_start is not None:
+            arrival = max(arrival, job.slot_start)
+        return arrival, travel
+
+    for commitment in tech.commitments:
+        if commitment.end <= cursor_time:
+            continue  # already over
+        arrival, travel = reach(cursor_at, cursor_time)
+        onward = distance.travel_minutes(job.location, commitment.location)
+        if arrival + duration + timedelta(minutes=onward) <= commitment.start:
+            return arrival, travel
+        cursor_time = max(cursor_time, commitment.end)
+        cursor_at = commitment.location
+
+    # After everything already on the day. With no commitments `free_at` and `position`
+    # are the whole story (a technician who is simply busy, as before).
+    return reach(
+        tech.position if tech.commitments else cursor_at, max(cursor_time, tech.free_at)
+    )
 
 
 def _reject(tech: TechView, code: ReasonCode, **facts: float | str) -> Rejection:
@@ -85,8 +113,7 @@ def filter_technicians(
             )
             continue
 
-        travel = distance.travel_minutes(tech.position, job.location)
-        arrival = _arrival(job, tech, travel, now)
+        arrival, travel = _arrival(job, tech, distance, now)
         if arrival > tech.shift_end:  # arriving exactly at closing is still allowed
             late = (arrival - tech.shift_end).total_seconds() / 60
             rejected.append(

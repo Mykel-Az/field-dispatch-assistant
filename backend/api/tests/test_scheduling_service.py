@@ -564,6 +564,37 @@ def test_a_new_job_is_planned_after_a_job_assigned_by_hand_not_from_the_workstat
     assert fresh(urgent).technician_id == tech.pk
 
 
+def test_an_urgent_job_goes_before_a_job_assigned_by_hand_for_later_in_the_day(
+    org, dispatcher_a, tech
+):
+    """The production bug: the breaker job was fixed at 2-4 pm, it was 9 am, and the urgent
+    AC job was planned for 4:11 pm ("480 min late") instead of that morning (ADR-027)."""
+    breaker = job(
+        org,
+        slot_start=at(20),  # 2 pm local
+        slot_end=at(22),  # 4 pm local
+        estimated_duration_minutes=120,
+        lat=30.36,
+        lng=-97.65,
+    )
+    job_service.transition(fresh(breaker), "assigned", dispatcher_a, technician=tech)
+    ac = job(
+        org,
+        is_urgent=True,
+        slot_start=None,
+        slot_end=None,
+        estimated_duration_minutes=60,
+    )
+    run(org, dispatcher_a)
+    planned = fresh(ac)
+    assert planned.technician_id == tech.pk
+    assert planned.estimated_arrival < at(20) - datetime.timedelta(minutes=60)
+    assert planned.plan_explanation["sla_label"] != "breach"
+    # The job assigned by hand is exactly as it was.
+    kept = fresh(breaker)
+    assert kept.status == JobStatus.ASSIGNED and kept.estimated_arrival is None
+
+
 def test_travel_to_the_new_job_starts_from_the_last_job_not_the_workstation(
     org, dispatcher_a, tech
 ):

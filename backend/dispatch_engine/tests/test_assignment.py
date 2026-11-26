@@ -1,5 +1,6 @@
 """ASSIGN: order, choice, the technician's day moving forward, and the expected 'nobody' outcome."""
 
+import itertools
 import random
 from datetime import timedelta
 
@@ -200,8 +201,11 @@ def test_the_next_trip_starts_from_the_last_job():
         job(2, end=300, location=second_place),
     ]
     run(jobs, [make_tech(position=start)], distance=distance)
-    # The last two lookups are the final (deadline-order) pass: start -> first -> second.
-    assert distance.calls[-2:] == [(start, first_place), (first_place, second_place)]
+    # In the final (deadline-order) pass the first job is driven to from the start, and the
+    # second is also tried after the first (the gap before the first job is tried too, ADR-027).
+    final_pass = distance.calls[-4:]
+    assert (start, first_place) in final_pass
+    assert (first_place, second_place) in final_pass
 
 
 def test_load_from_the_first_job_sends_the_second_to_the_other_technician():
@@ -500,13 +504,16 @@ def test_a_technicians_jobs_never_overlap(scenario):  # inv. 6
     jobs, techs, travel = scenario
     plan = run(jobs, techs, distance=StubDistance(travel))
     durations = {j.id: j.duration_minutes for j in jobs}
-    last_end = {}
-    for a in plan.assignments:  # in the order they were planned
-        if a.technician_id in last_end:
-            assert a.estimated_arrival >= last_end[a.technician_id]
-        last_end[a.technician_id] = a.estimated_arrival + timedelta(
-            minutes=durations[a.job_id]
-        )
+    # A job planned later may sit in a gap before an earlier-planned one (ADR-027), so
+    # compare in the order the jobs will happen, not the order they were planned.
+    by_tech: dict[int, list] = {}
+    for a in plan.assignments:
+        by_tech.setdefault(a.technician_id, []).append(a)
+    for assignments in by_tech.values():
+        assignments.sort(key=lambda a: a.estimated_arrival)
+        for before, after in itertools.pairwise(assignments):
+            end = before.estimated_arrival + timedelta(minutes=durations[before.job_id])
+            assert after.estimated_arrival >= end
 
 
 @given(scenarios(), st.randoms())
