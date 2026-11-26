@@ -38,7 +38,7 @@ first run there are none.
   to reverse.
 
 ## Trade-offs
-- TIME: existing jobs only push `free_at` and `position` forward. A gap before a
-  later fixed job is not used by new jobs until gap insertion (S3c).
+- Existing jobs were first treated as "busy until the last one ends"; ADR-027 replaced
+  that with real gaps, so new jobs can go before a later fixed job.
 - Plan again can change an arrival time the technician has already seen. It is a
   button, not automatic, and it leaves a history row.

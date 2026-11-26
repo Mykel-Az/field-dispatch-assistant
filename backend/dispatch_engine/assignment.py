@@ -28,6 +28,7 @@ from .filtering import filter_technicians
 from .scoring import score_candidates
 from .types import (
     Assignment,
+    Commitment,
     JobView,
     OrgConfig,
     Plan,
@@ -189,12 +190,25 @@ def _pass(
                 ),
             )
         )
-        # The technician is now busy until the job ends, and ends up where it is.
+        # The job is now a commitment. If it is the last thing on the day the technician
+        # ends up where it is; if it went into a gap before a later job they do not.
+        ends = best.estimated_arrival + timedelta(minutes=job.duration_minutes)
+        last = ends >= tech.free_at
         current[tech.id] = replace(
             tech,
-            free_at=best.estimated_arrival + timedelta(minutes=job.duration_minutes),
-            position=job.location,
+            free_at=max(tech.free_at, ends),
+            position=job.location if last else tech.position,
             assigned_count=tech.assigned_count + 1,
+            commitments=tuple(
+                sorted(
+                    (
+                        *tech.commitments,
+                        Commitment(best.estimated_arrival, ends, job.location),
+                    ),
+                    key=lambda c: (c.start, c.end),
+                )
+            ),
+            home=tech.home or tech.position,
         )
 
     return Plan(tuple(assignments), tuple(unassigned))

@@ -14,7 +14,14 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from dispatch_engine.distance import DEFAULT_SPEED_MPH
-from dispatch_engine.types import JobView, Location, OrgConfig, Priority, TechView
+from dispatch_engine.types import (
+    Commitment,
+    JobView,
+    Location,
+    OrgConfig,
+    Priority,
+    TechView,
+)
 
 from .models import Job, JobPriority, JobStatus, Organization, Technician
 
@@ -101,13 +108,16 @@ def _planned_start(job: Job) -> datetime | None:
     return job.estimated_arrival or job.slot_start
 
 
-def _busy_chain(workload: Iterable[Job], now: datetime) -> tuple[datetime, Job | None]:
-    """When a technician finishes everything already on their day, and with which job.
+def _busy_chain(
+    workload: Iterable[Job], now: datetime
+) -> list[tuple[datetime, datetime, Job]]:
+    """The stretches of a technician's day that are already taken, in the order they happen.
 
     Jobs are walked in the order they will happen: Ongoing first, then Assigned ones
     by their expected start. An Assigned job cannot start before the one before it
-    ends, or before now, so two jobs assigned by hand do not both start "now". The
-    job a technician finishes last is where they will be.
+    ends, or before now, so two jobs assigned by hand do not both start "now". Each
+    entry is (start, end, job). A job whose time has passed and whose window is shut
+    holds nobody and is left out.
     """
     ordered = sorted(
         workload,
@@ -117,7 +127,8 @@ def _busy_chain(workload: Iterable[Job], now: datetime) -> tuple[datetime, Job |
             j.pk,
         ),
     )
-    cursor, last = now, None
+    cursor = now
+    chain: list[tuple[datetime, datetime, Job]] = []
     for job in ordered:
         duration = timedelta(minutes=job.estimated_duration_minutes)
         if job.status == JobStatus.ONGOING and job.arrived_at is not None:
@@ -129,9 +140,9 @@ def _busy_chain(workload: Iterable[Job], now: datetime) -> tuple[datetime, Job |
                 continue  # its time has passed and its window is shut: not holding anyone
             start = max(cursor, planned or cursor)
         end = start + duration
-        if end > cursor:
-            cursor, last = end, job
-    return cursor, last
+        cursor = max(cursor, end)
+        chain.append((start, end, job))
+    return chain
 
 
 def technician_to_view(
@@ -145,19 +156,23 @@ def technician_to_view(
     """A technician as the engine sees them on `plan_date`.
 
     `workload` is their Assigned and Ongoing jobs for that day, by hand or by the
-    planner. TIME shortcut: those jobs only push `free_at` and `position` forward
-    (the technician is treated as busy until the last one ends); they are not fixed
-    anchors the new jobs can fit around, so a gap before a later job is not used
-    until gap insertion (S3c).
+    planner. Each is a fixed commitment: new jobs fit in the gaps between them, never
+    moving them (ADR-027). `free_at` and `position` are where the technician is after
+    the last one. TIME: a commitment's start is its planned arrival, else the start of
+    the customer's window, else now; a job with neither blocks from now.
     """
     tz = organization.timezone
     jobs = list(workload)
-    free_at, last = _busy_chain(jobs, now)
-    position = (
-        _location(last)
-        if last is not None and last.lat is not None
-        else _location(organization)
-    )
+    chain = _busy_chain(jobs, now)
+    home = _location(organization)
+
+    def where(job: Job) -> Location:
+        return _location(job) if job.lat is not None else home
+
+    free_at = max((end for _, end, _ in chain), default=now)
+    last = max(chain, key=lambda c: c[1])[2] if chain else None
+    position = where(last) if last is not None else home
+    commitments = tuple(Commitment(start, end, where(job)) for start, end, job in chain)
     user = technician.user
     return TechView(
         id=technician.pk,
@@ -169,4 +184,6 @@ def technician_to_view(
         free_at=free_at,
         position=position,
         assigned_count=len(jobs),
+        commitments=commitments,
+        home=home,
     )

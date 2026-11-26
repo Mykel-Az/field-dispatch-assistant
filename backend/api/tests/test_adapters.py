@@ -297,6 +297,35 @@ def test_a_hand_assigned_job_whose_window_has_shut_does_not_hold_anyone(org, ski
     assert view.assigned_count == 1
 
 
+def test_each_existing_job_is_a_commitment_in_the_order_it_will_happen(org, skill):
+    technician = tech_of(org, skill)
+    later = window_job(
+        org, skill, technician, NOW + 6 * HOUR, minutes=60, lat=30.36, lng=-97.65
+    )
+    sooner = window_job(
+        org, skill, technician, NOW + 2 * HOUR, minutes=30, lat=30.31, lng=-97.70
+    )
+    view = view_of(technician, org, [later, sooner])
+    assert [(c.start, c.end) for c in view.commitments] == [
+        (NOW + 2 * HOUR, NOW + 2 * HOUR + datetime.timedelta(minutes=30)),
+        (NOW + 6 * HOUR, NOW + 7 * HOUR),
+    ]
+    assert (view.commitments[1].location.lat, view.commitments[1].location.lng) == (
+        30.36,
+        -97.65,
+    )
+    assert view.free_at == NOW + 7 * HOUR
+    assert view.home == view.commitments[0].location.__class__(org.lat, org.lng)
+
+
+def test_a_technician_with_no_jobs_has_no_commitments_and_starts_at_the_workstation(
+    org, skill
+):
+    view = view_of(tech_of(org, skill), org, [])
+    assert view.commitments == ()
+    assert (view.position.lat, view.position.lng) == (org.lat, org.lng)
+
+
 def test_an_ongoing_job_is_counted_from_when_the_technician_arrived(org, skill):
     technician = tech_of(org, skill)
     job = window_job(
