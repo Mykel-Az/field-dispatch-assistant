@@ -141,6 +141,8 @@ class ReasonCode(StrEnum):
     SLA_BREACH = "sla_breach"
     URGENT_OVER_LIMIT = "urgent_over_limit"
     SAME_SITE = "same_site"
+    # where the job sits in the technician's run (SEQUENCE)
+    STOP_ORDER = "stop_order"
     # why a job went to nobody (ASSIGN)
     NO_FEASIBLE_TECHNICIAN = "no_feasible_technician"
 

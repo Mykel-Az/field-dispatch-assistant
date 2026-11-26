@@ -3,7 +3,7 @@ import type { MapPin } from '../../shared/api/client';
 import { countByTechnician, limitWarning, loadText } from './loadModel';
 
 const pin = (id: number, technician_id: number | null, status: string): MapPin => ({
-  id, lat: 1, lng: 1, status, technician_id, is_urgent: false,
+  id, lat: 1, lng: 1, status, technician_id, is_urgent: false, scheduled_date: '2026-11-25', sequence_position: null,
 });
 
 describe('countByTechnician', () => {

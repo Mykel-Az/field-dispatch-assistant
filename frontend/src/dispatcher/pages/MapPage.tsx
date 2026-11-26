@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { fetchJob, fetchMapJobs, type MapPin } from '../../shared/api/client';
-import type { JobDetail } from '../../shared/api/models';
+import { fetchJob, fetchMapJobs, fetchTechnicians, type MapPin } from '../../shared/api/client';
+import type { JobDetail, Technician } from '../../shared/api/models';
 import JobFilterBar from '../../shared/components/JobFilterBar';
 import StatusBadge from '../../shared/components/StatusBadge';
 import StatusPin from '../../shared/components/StatusPin';
@@ -9,6 +9,7 @@ import { NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
 import JobTags from '../../shared/components/JobTags';
 import { formatWhen, placeLine } from '../../shared/jobTime';
 import JobsMap from '../../shared/map/JobsMap';
+import { buildRouteLines } from '../../shared/map/routeLines';
 import { useOffice } from '../../shared/map/useOffice';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
@@ -34,6 +35,11 @@ export default function MapPage() {
   const [detailError, setDetailError] = useState(false);
   const latest = useRef(0);
   const office = useOffice();
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  useEffect(() => {
+    fetchTechnicians().then(setTechnicians).catch(() => setTechnicians([])); // colours only: the map still works without
+  }, []);
+  const routes = useMemo(() => buildRouteLines(pins, technicians, office), [pins, technicians, office]);
 
   const refresh = useCallback(async () => {
     const mine = ++latest.current; // a slow older answer must not overwrite a newer one
@@ -118,7 +124,7 @@ export default function MapPage() {
         </div>
       )}
       {(pins.length > 0 || office || !loaded || failed) && (
-        <JobsMap pins={pins} selectedId={selectedId} onSelect={setSelectedId} office={office} />
+        <JobsMap pins={pins} selectedId={selectedId} onSelect={setSelectedId} office={office} routes={routes} />
       )}
 
       <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-muted" aria-label="Pin colours">
@@ -130,6 +136,11 @@ export default function MapPage() {
         {office && (
           <li className="flex items-center gap-1.5">
             <span aria-hidden="true" className="inline-block size-4 rounded bg-ink" /> Office
+          </li>
+        )}
+        {routes.length > 0 && (
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="inline-block w-6 border-t-[3px] border-dashed border-ink-muted" /> Planned route, in stop order (straight lines, not roads)
           </li>
         )}
       </ul>

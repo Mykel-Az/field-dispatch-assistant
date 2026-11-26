@@ -40,3 +40,7 @@ dispatcher rather than applying them.
 **TIME:** Sprint 2 plans one pass in order of earliest deadline and does not
 fill gaps. The full-fidelity path is sequencing with fixed windows as anchors
 (Sprint 3). A per-job "customer must be present" setting is a further path.
+
+> **Amendment (Nov 26):** the sequencing pass now exists, with the rules above and a
+> never-later safety net, and it works around fixed jobs and gaps: see
+> [ADR-028](028-sequencing-nearest-next-never-later.md).

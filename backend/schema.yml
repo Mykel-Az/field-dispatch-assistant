@@ -1508,8 +1508,11 @@ components:
       - password
     MapJob:
       type: object
-      description: 'One pin. Deliberately thin: the map polls this, so no text, no
-        history.'
+      description: |-
+        One pin. Deliberately thin: the map polls this, so no text, no history.
+
+        `sequence_position` is the stop number on the technician's day; the map joins the
+        stops of one technician and day, in this order, into a route line.
       properties:
         id:
           type: integer
@@ -1535,11 +1538,22 @@ components:
         is_urgent:
           type: boolean
           readOnly: true
+        scheduled_date:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        sequence_position:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - id
       - is_urgent
       - lat
       - lng
+      - scheduled_date
+      - sequence_position
       - status
       - technician_id
     MapJobs:

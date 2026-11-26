@@ -677,6 +677,8 @@ def test_map_returns_thin_pins_for_located_jobs_only(dispatcher_a, org_a):
             "status": "unassigned",
             "technician_id": None,
             "is_urgent": False,
+            "scheduled_date": located.scheduled_date.isoformat(),
+            "sequence_position": None,
         }
     ]
 

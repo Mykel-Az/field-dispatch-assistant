@@ -15,8 +15,8 @@ document gives the whole picture and links to them.
 | [Sprint 1 test inventory](#sprint-1-test-inventory) | What the suite held when Sprint 1 closed |
 | [Responsive layout](#responsive-layout-s2-9) | How the UI adapts to a phone |
 
-Status: Sprint 2 in progress. Sequencing (route order) and replanning are Sprint 3;
-their engine files exist and are empty, and nothing below describes them as done.
+Status: Sprint 3 in progress. Sequencing (route order, ADR-028) is built; replanning is
+Sprint 3 and `replanning.py` is still empty, so nothing below describes it as done.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ transaction.
 ### Module boundaries
 | Module | Owns | May import | May not import |
 |---|---|---|---|
-| `dispatch_engine/` | FILTER, SCORE, ASSIGN, lifecycle rules, explanations, clock and distance protocols | Python standard library | `api`, `geocoding`, `config`, `django`, `rest_framework` (CI fails the build) |
+| `dispatch_engine/` | FILTER, SCORE, ASSIGN, SEQUENCE, lifecycle rules, explanations, clock and distance protocols | Python standard library | `api`, `geocoding`, `config`, `django`, `rest_framework` (CI fails the build) |
 | `geocoding/` | `Geocoder` protocol, Nominatim client, cache, throttle, fake | standard library | the other three |
 | `api/` | models, serializers, views, permissions, services, adapters | all of the above | n/a |
 | `config/` | settings (base, local, test, prod), URLs | `api` | n/a |
@@ -109,6 +109,19 @@ the single reason recorded:
 Estimated arrival is the latest of now, the technician's free time and shift
 start, plus travel. For a job with a slot it is never earlier than the slot
 opening. Results are in id order and do not depend on input order.
+
+### Sequencing (ADR-028)
+After ASSIGN, `sequencing.py` orders each technician's new jobs for driving. Jobs the
+technician already has are fixed commitments, and new ones go in the gaps between them
+(ADR-027). At each step it keeps the jobs that do not make the rest of the day later
+than the deadline order would, puts an urgent job first, then takes the nearest job
+that needs no waiting (else the one reached soonest). The result replaces ASSIGN's
+order only when it is no later in total and drives less, so it can never make a day
+worse. Arrival, slack and label are recomputed and the stored explanation gains a
+`stop_order` reason. Stops are numbered over the whole day in clock order, so the
+dispatcher map draws one dashed line per technician and day in the order it runs.
+The lines are straight, not roads. TIME: greedy per technician; gap choice does not
+look at total driving (full fidelity: solve order and gaps together).
 
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
@@ -229,9 +242,9 @@ python manage.py spectacular --file schema.yml && (cd ../frontend && npm run api
 CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
-### Current size (collected, Sprint 2)
-Backend 739 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 182. Per-file counts: `pytest --collect-only -q`.
+### Current size (collected, Sprint 3, after sequencing)
+Backend 767 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 186. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.
@@ -274,8 +287,8 @@ endpoints, priority, any-time jobs, time zone rules, and the plan, technician an
 layout screens.
 
 ## Gaps and known limits
-- The planner is greedy: no gap insertion until Sprint 3 (`available_slots`);
-  sequencing and replanning are Sprint 3.
+- The planner is greedy (gaps, ADR-027; sequencing, ADR-028). Replanning on disruption
+  and `available_slots` are Sprint 3.
 - Frontend tests use jsdom, so layout, focus rings and real touch are checked by
   hand, not by CI.
 - The time zone rule has a small race window (ADR-024).

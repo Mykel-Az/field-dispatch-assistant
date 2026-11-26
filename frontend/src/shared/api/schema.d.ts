@@ -765,7 +765,12 @@ export interface components {
             email: string;
             password: string;
         };
-        /** @description One pin. Deliberately thin: the map polls this, so no text, no history. */
+        /**
+         * @description One pin. Deliberately thin: the map polls this, so no text, no history.
+         *
+         *     `sequence_position` is the stop number on the technician's day; the map joins the
+         *     stops of one technician and day, in this order, into a route line.
+         */
         MapJob: {
             readonly id: number;
             /** Format: double */
@@ -775,6 +780,9 @@ export interface components {
             readonly status: components["schemas"]["JobStatusEnum"];
             readonly technician_id: number | null;
             readonly is_urgent: boolean;
+            /** Format: date */
+            readonly scheduled_date: string | null;
+            readonly sequence_position: number | null;
         };
         MapJobs: {
             results: components["schemas"]["MapJob"][];

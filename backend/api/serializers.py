@@ -685,11 +685,24 @@ class JobPinSerializer(serializers.Serializer):
 
 
 class MapJobSerializer(serializers.ModelSerializer):
-    """One pin. Deliberately thin: the map polls this, so no text, no history."""
+    """One pin. Deliberately thin: the map polls this, so no text, no history.
+
+    `sequence_position` is the stop number on the technician's day; the map joins the
+    stops of one technician and day, in this order, into a route line.
+    """
 
     class Meta:
         model = Job
-        fields = ["id", "lat", "lng", "status", "technician_id", "is_urgent"]
+        fields = [
+            "id",
+            "lat",
+            "lng",
+            "status",
+            "technician_id",
+            "is_urgent",
+            "scheduled_date",
+            "sequence_position",
+        ]
         read_only_fields = fields
 
 

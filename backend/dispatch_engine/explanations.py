@@ -71,6 +71,60 @@ def explain_assignment(
     return Explanation(tuple(reasons))
 
 
+def explain_stop(
+    explanation: Explanation,
+    *,
+    travel_minutes: float,
+    slack_minutes: float,
+    label: SlaLabel,
+    stop: int,
+    stops: int,
+    previous_job_id: int,
+    reordered: bool,
+) -> Explanation:
+    """Restate an assignment's reasons after SEQUENCE: new drive time, slack and label, plus the stop.
+
+    ASSIGN worked out travel and slack for the moment it placed the job. Once the
+    route is ordered the job is reached from a different place, so those numbers
+    change. Every other reason (limits, why others were rejected) is kept as it was.
+    `previous_job_id` is 0 for the first stop. Minutes are whole numbers, so the
+    text matches the facts.
+    """
+    slack = math.floor(slack_minutes)
+    kept: list[Reason] = []
+    for reason in explanation.reasons:
+        if reason.code in (ReasonCode.SLA_AT_RISK, ReasonCode.SLA_BREACH):
+            continue  # restated below from the new slack
+        if reason.code == ReasonCode.ASSIGNED:
+            reason = Reason(
+                reason.code,
+                {
+                    **reason.facts,
+                    "travel_minutes": round(travel_minutes),
+                    "slack_minutes": slack,
+                },
+            )
+        kept.append(reason)
+    after_assigned: list[Reason] = []
+    if label == SlaLabel.AT_RISK:
+        after_assigned.append(Reason(ReasonCode.SLA_AT_RISK, {"slack_minutes": slack}))
+    elif label == SlaLabel.BREACH:
+        after_assigned.append(Reason(ReasonCode.SLA_BREACH, {"late_minutes": -slack}))
+    after_assigned.append(
+        Reason(
+            ReasonCode.STOP_ORDER,
+            {
+                "stop": stop,
+                "stops": stops,
+                "previous_job_id": previous_job_id,
+                "drive_minutes": round(travel_minutes),
+                "reordered": int(reordered),
+            },
+        )
+    )
+    return Explanation((kept[0], *after_assigned, *kept[1:]))
+
+
 def explain_unassigned(
     job: JobView, rejected: Iterable[Rejection], technicians_checked: int
 ) -> Explanation:
@@ -118,6 +172,18 @@ def assignment_sentence(
         )
     if _first(why, ReasonCode.SAME_SITE):
         parts.append(f"{label} already has a job at this location.")
+    order = _first(why, ReasonCode.STOP_ORDER)
+    if order and int(order["stops"]) > 1:
+        where = (
+            "first stop"
+            if order["previous_job_id"] == 0
+            else f"stop {order['stop']} of {order['stops']}"
+        )
+        parts.append(
+            f"It is {where} of this run, {order['drive_minutes']} min from the previous point."
+        )
+        if order["reordered"]:
+            parts.append("The run was reordered to cut driving time.")
     over = _first(why, ReasonCode.URGENT_OVER_LIMIT)
     if over:
         others = (

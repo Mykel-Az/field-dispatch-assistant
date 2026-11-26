@@ -121,6 +121,10 @@ export interface MapPin {
   status: string;
   technician_id: number | null;
   is_urgent: boolean;
+  /** The day the job is planned for, YYYY-MM-DD on the organization's clock. */
+  scheduled_date: string;
+  /** Stop number on the technician's day; null until the planner has placed the job. */
+  sequence_position: number | null;
 }
 export const fetchMapJobs = (filters: JobFilterValues = NO_FILTERS) => {
   const params = filterQuery(filters);

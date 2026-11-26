@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import F, Max, Q
 from django.utils import timezone
 
 from dispatch_engine import lifecycle as lc
@@ -21,6 +21,7 @@ from dispatch_engine.assignment import assign_jobs
 from dispatch_engine.clock import Clock, FixedClock, SystemClock
 from dispatch_engine.distance import HaversineProvider
 from dispatch_engine.explanations import assignment_sentence, unassigned_sentence
+from dispatch_engine.sequencing import sequence_plan
 from dispatch_engine.types import Explanation
 
 from ..adapters import at_local, job_to_view, org_to_config, technician_to_view
@@ -149,6 +150,16 @@ def generate_schedule(
         plan = assign_jobs(
             job_views.values(), tech_views.values(), config, distance, FixedClock(now)
         )
+        # SEQUENCE: order each technician's new jobs for driving, around what they
+        # already have (ADR-028). Same views as ASSIGN got, so commitments are the same.
+        plan = sequence_plan(
+            plan,
+            job_views.values(),
+            tech_views.values(),
+            config,
+            distance,
+            FixedClock(now),
+        )
 
         jobs = {j.pk: j for j in plannable}
         techs = {t.pk: t for t in technicians}
@@ -192,6 +203,10 @@ def generate_schedule(
                     sentence,
                 )
             )
+
+        _renumber_stops(
+            organization, plan_date, {a.technician_id for a in plan.assignments}, now
+        )
 
         unassigned: list[UnplannedJob] = []
         for u in plan.unassigned:
@@ -349,3 +364,36 @@ def _next_positions(organization, plan_date: date) -> defaultdict[int, int]:
     for row in rows:
         positions[row["technician_id"]] = (row["last"] or 0) + 1
     return positions
+
+
+_STOP_SHIFT = 1000  # moves numbers out of the way while a day is renumbered
+
+
+def _renumber_stops(
+    organization, plan_date: date, technician_ids, now: datetime
+) -> None:
+    """Number each technician's whole day 1, 2, 3... in the order it runs (ADR-028).
+
+    A new job can land in a gap before a job the technician already had, so "append
+    after the last number" would give a route line that doubles back. Only the stop
+    numbers of those jobs change: never the technician, the time or the status
+    (invariant 12). The stop number is unique per technician and day, so every row
+    is first moved out of the way and then given its final number.
+    """
+    for tech_id in sorted(technician_ids):
+        day = Job.objects.for_organization(organization).filter(
+            status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING],
+            scheduled_date=plan_date,
+            technician_id=tech_id,
+        )
+        jobs = sorted(
+            day,
+            key=lambda j: (
+                j.status != JobStatus.ONGOING,
+                j.estimated_arrival or j.slot_start or now,
+                j.pk,
+            ),
+        )
+        day.update(sequence_position=F("sequence_position") + _STOP_SHIFT)
+        for number, job in enumerate(jobs, start=1):
+            Job.objects.filter(pk=job.pk).update(sequence_position=number)

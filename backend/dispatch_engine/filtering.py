@@ -6,11 +6,13 @@ rejects. It does not rank or choose; SCORE and ASSIGN do that.
 """
 
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from .distance import DistanceProvider
 from .types import (
     Candidate,
+    Commitment,
     FilterResult,
     JobView,
     Reason,
@@ -62,6 +64,30 @@ def _arrival(
     # are the whole story (a technician who is simply busy, as before).
     return reach(
         tech.position if tech.commitments else cursor_at, max(cursor_time, tech.free_at)
+    )
+
+
+def commit_job(tech: TechView, job: JobView, arrival: datetime) -> TechView:
+    """The technician after taking `job` at `arrival`: the job is now a commitment.
+
+    If it is the last thing on the day the technician ends up where it is; if it went
+    into a gap before a later job they do not. Shared by ASSIGN and SEQUENCE so both
+    describe a growing day the same way.
+    """
+    ends = arrival + timedelta(minutes=job.duration_minutes)
+    last = ends >= tech.free_at
+    return replace(
+        tech,
+        free_at=max(tech.free_at, ends),
+        position=job.location if last else tech.position,
+        assigned_count=tech.assigned_count + 1,
+        commitments=tuple(
+            sorted(
+                (*tech.commitments, Commitment(arrival, ends, job.location)),
+                key=lambda c: (c.start, c.end),
+            )
+        ),
+        home=tech.home or tech.position,
     )
 
 

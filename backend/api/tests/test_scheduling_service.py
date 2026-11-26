@@ -681,3 +681,49 @@ def test_replan_on_a_day_with_nothing_placed_is_just_a_run(org, dispatcher_a, te
     j = job(org)
     run(org, dispatcher_a, replan=True)
     assert fresh(j).status == JobStatus.ASSIGNED
+
+
+# ---- sequencing around what the technician already has (ADR-028) ----------------
+def test_a_new_job_in_a_gap_before_an_existing_one_is_numbered_before_it(
+    org, dispatcher_a, tech
+):
+    """The route line must not double back: stop numbers follow the clock, not the run."""
+    existing = job(
+        org,
+        slot_start=at(19),
+        slot_end=at(21),
+        status=JobStatus.ASSIGNED,
+        technician=tech,
+        sequence_position=1,
+        estimated_arrival=at(19),
+    )
+    new = job(org, slot_start=at(15), slot_end=at(17))
+    run(org, dispatcher_a)
+    assert fresh(new).estimated_arrival < fresh(existing).estimated_arrival
+    assert (fresh(new).sequence_position, fresh(existing).sequence_position) == (1, 2)
+    # Only the stop number of the existing job may change (invariant 12).
+    assert fresh(existing).technician_id == tech.pk
+    assert fresh(existing).estimated_arrival == at(19)
+    assert fresh(existing).status == JobStatus.ASSIGNED
+
+
+def test_stop_numbers_are_one_to_n_in_time_order_after_every_run(
+    org, dispatcher_a, tech
+):
+    for start in (19, 15, 17):
+        job(org, slot_start=at(start), slot_end=at(start + 1))
+    run(org, dispatcher_a)
+    day = Job.objects.filter(technician=tech, scheduled_date=DAY).order_by(
+        "sequence_position"
+    )
+    assert [j.sequence_position for j in day] == [1, 2, 3]
+    arrivals = [j.estimated_arrival for j in day]
+    assert arrivals == sorted(arrivals)
+
+
+def test_the_stop_order_is_in_the_stored_explanation(org, dispatcher_a, tech):
+    job(org, slot_start=at(15), slot_end=at(17))
+    job(org, slot_start=at(19), slot_end=at(21))
+    result = run(org, dispatcher_a)
+    codes = [r["code"] for r in result.assigned[0].reasons]
+    assert "stop_order" in codes

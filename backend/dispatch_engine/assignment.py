@@ -18,17 +18,15 @@ later (a worse SLA label) than a technician at the limit.
 
 import logging
 from collections.abc import Iterable
-from dataclasses import replace
 from datetime import datetime, timedelta
 
 from .clock import Clock
 from .distance import DistanceProvider
 from .explanations import explain_assignment, explain_unassigned
-from .filtering import filter_technicians
+from .filtering import commit_job, filter_technicians
 from .scoring import score_candidates
 from .types import (
     Assignment,
-    Commitment,
     JobView,
     OrgConfig,
     Plan,
@@ -190,26 +188,8 @@ def _pass(
                 ),
             )
         )
-        # The job is now a commitment. If it is the last thing on the day the technician
-        # ends up where it is; if it went into a gap before a later job they do not.
-        ends = best.estimated_arrival + timedelta(minutes=job.duration_minutes)
-        last = ends >= tech.free_at
-        current[tech.id] = replace(
-            tech,
-            free_at=max(tech.free_at, ends),
-            position=job.location if last else tech.position,
-            assigned_count=tech.assigned_count + 1,
-            commitments=tuple(
-                sorted(
-                    (
-                        *tech.commitments,
-                        Commitment(best.estimated_arrival, ends, job.location),
-                    ),
-                    key=lambda c: (c.start, c.end),
-                )
-            ),
-            home=tech.home or tech.position,
-        )
+        # The job is now a commitment for the next job in this pass (ADR-027).
+        current[tech.id] = commit_job(tech, job, best.estimated_arrival)
 
     return Plan(tuple(assignments), tuple(unassigned))
 
