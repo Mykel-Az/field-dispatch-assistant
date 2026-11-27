@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.db import transaction
 from django.db.models import F, Prefetch
@@ -869,15 +871,27 @@ class TechnicianArriveView(_TechnicianJobAction):
         )
 
 
+def _reestimate(technician, job):
+    """Restate the technician's later stops. A failure here never undoes their action."""
+    try:
+        scheduling.reestimate_after_finish(technician=technician, finished_job=job)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "re-estimate failed for %s", technician.pk
+        )
+
+
 class TechnicianCompleteView(_TechnicianJobAction):
     @extend_schema(request=None, responses=TechnicianJobSerializer)
     def post(self, request, pk):
         return super().post(request, pk)
 
     def perform(self, request, job, technician):
-        return job_service.complete_job(
+        done = job_service.complete_job(
             job=job, technician=technician, actor=request.user
         )
+        _reestimate(technician, done)
+        return done
 
 
 class TechnicianIncompleteView(_TechnicianJobAction):
@@ -890,9 +904,11 @@ class TechnicianIncompleteView(_TechnicianJobAction):
     def perform(self, request, job, technician):
         serializer = TechnicianIncompleteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        return job_service.incomplete_job(
+        returned = job_service.incomplete_job(
             job=job,
             technician=technician,
             actor=request.user,
             reason=serializer.validated_data["reason"],
         )
+        _reestimate(technician, returned)
+        return returned

@@ -137,6 +137,10 @@ export default function PlanPage() {
     };
   }, [date, reloads]);
 
+  // One button: the first run plans the queue; once the planner has placed jobs for the day
+  // the same button redoes its own choices (ADR-026), which also picks up new jobs.
+  const hasPlanned = outcome?.result.assigned.some((a) => a.placed_by === 'planner') ?? false;
+
   async function run(replan = false) {
     setRunning(true);
     setFailure(null);
@@ -159,14 +163,15 @@ export default function PlanPage() {
       <p className={`${ui.muted} mb-4`}>
         Assigns the day’s unassigned jobs to technicians and explains each choice. Jobs that are
         already assigned stay with their technician, and new jobs are planned around them.
-        After changing a setting, use Plan again to redo the planner’s own choices.
+        Once the day has been planned, the button becomes Plan again: it redoes the planner’s own
+        choices (after a setting changed, say) and leaves hand-assigned and started jobs alone.
       </p>
 
       <form
         className="mb-6 flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
-          void run();
+          void run(hasPlanned);
         }}
       >
         <label className={ui.label}>
@@ -181,17 +186,17 @@ export default function PlanPage() {
             onChange={(event) => setDate(event.target.value)}
           />
         </label>
-        <button type="submit" className={ui.btn} disabled={running || loading || !date}>
-          {running ? 'Planning…' : 'Run plan'}
-        </button>
         <button
-          type="button"
-          className={ui.btnOutline}
+          type="submit"
+          className={ui.btn}
           disabled={running || loading || !date}
-          onClick={() => void run(true)}
-          title="Return the jobs the planner placed (not ones you assigned by hand, or started) to the queue and plan them again"
+          title={
+            hasPlanned
+              ? 'Return the jobs the planner placed (not ones you assigned by hand, or started) to the queue and plan them again, with any new jobs'
+              : 'Assign this day’s unassigned jobs'
+          }
         >
-          Plan again
+          {running ? 'Planning…' : hasPlanned ? 'Plan again' : 'Run plan'}
         </button>
       </form>
 

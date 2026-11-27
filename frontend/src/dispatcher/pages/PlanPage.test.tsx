@@ -57,6 +57,8 @@ const mount = () =>
     );
   });
 
+const buttons = () => [...host.querySelectorAll('button')].map((b) => b.textContent);
+
 const click = async (label: string) => {
   const button = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(label));
   expect(button, `button "${label}"`).toBeTruthy();
@@ -116,15 +118,27 @@ describe('PlanPage', () => {
     expect(api.fetchSchedule).toHaveBeenLastCalledWith(nextDay);
   });
 
-  it('"Run plan" plans what is unassigned; "Plan again" asks the server to redo the planner’s own choices', async () => {
+  it('is one button: Run plan until the planner has placed jobs, then Plan again (replan)', async () => {
     api.generateSchedule.mockResolvedValue(done);
-    api.fetchSchedule.mockResolvedValue(done);
+    api.fetchSchedule.mockResolvedValueOnce(nothing).mockResolvedValue(done);
     await mount();
+    expect(buttons()).not.toContain('Plan again');
     await click('Run plan');
     expect(api.generateSchedule).toHaveBeenLastCalledWith(expect.stringMatching(/^\d{4}-/), false);
+    expect(buttons()).not.toContain('Run plan');
     await click('Plan again');
     expect(api.generateSchedule).toHaveBeenLastCalledWith(expect.stringMatching(/^\d{4}-/), true);
     expect(api.generateSchedule).toHaveBeenCalledTimes(2);
+  });
+
+  it('stays "Run plan" when everything on the day was assigned by hand', async () => {
+    api.fetchSchedule.mockResolvedValue({
+      ...done,
+      assigned: [{ ...done.assigned[0], placed_by: 'manual' }],
+    });
+    await mount();
+    expect(buttons()).toContain('Run plan');
+    expect(buttons()).not.toContain('Plan again');
   });
 
   it('shows a job assigned by hand with its technician, not only what a run just placed', async () => {
@@ -197,7 +211,7 @@ describe('PlanPage', () => {
     api.generateSchedule.mockResolvedValue(nothing);
     api.fetchSchedule.mockResolvedValue(done);
     await mount();
-    await click('Run plan');
+    await click('Plan again');
     expect(host.textContent).toContain('Sam was chosen.');
   });
 

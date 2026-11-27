@@ -143,6 +143,18 @@ late, miles and workload spread side by side. Tests: hand-computed distances (82
 travel, ignore breaches, ignore skills, reverse stop order) each fail tests. Honest
 result on the demo data: fewer breaches and less lateness on 3 of 4 days, not fewer miles.
 
+### Replan on overrun (ADR-031)
+After a technician completes a job or returns it incomplete, the remaining Assigned stops
+for that day get new arrival times, slack and labels, computed from now and the finished
+job's address, in their existing order (`reestimate` in `dispatch_engine/replanning.py`,
+`scheduling.reestimate_after_finish`). It never changes the technician or the order, does
+not bump `version`, and never undoes the technician's action if it fails. A deactivated
+technician's jobs go back to the queue and the single planner button plans them again.
+Tests: hand-computed times (`test_replanning.py`), the service and both technician
+endpoints (`test_reestimate.py`); six mutations each fail a test (the equivalent
+"ignore free_at" mutant is not killable because `now` already floors the start).
+TIME: planned, not actual, durations for later stops.
+
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
 priority (high before low), then earliest deadline, then id; when there are not
@@ -263,8 +275,8 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 3, after metrics)
-Backend 817 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 199. Per-file counts: `pytest --collect-only -q`.
+Backend 832 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 200. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.

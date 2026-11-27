@@ -35,3 +35,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [028](028-sequencing-nearest-next-never-later.md) | Sequence each technician's day nearest-next, and never make it later |
 | [029](029-force-assign-urgent-job-and-bump.md) | Force-assign an urgent job, bumping what stands in the way |
 | [030](030-before-after-metrics-against-round-robin.md) | Measure the plan against a round-robin baseline |
+| [031](031-replan-on-overrun-and-unavailable-technician.md) | Restate the day when a job runs over; plan again when a technician drops out |

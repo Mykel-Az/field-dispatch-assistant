@@ -28,8 +28,9 @@ from dispatch_engine.explanations import (
     unassigned_sentence,
 )
 from dispatch_engine.metrics import PlanMetrics, compare
+from dispatch_engine.replanning import reestimate
 from dispatch_engine.sequencing import sequence_plan
-from dispatch_engine.types import Explanation
+from dispatch_engine.types import Explanation, Location
 
 from ..adapters import (
     _PRIORITY,
@@ -656,3 +657,72 @@ def day_metrics(
         routes, views.values(), tech_views, config, distance, day_opens, plan_unplaced=0
     )
     return DayMetrics(plan_date, len(placed), in_queue, plan, baseline)
+
+
+def reestimate_after_finish(*, technician, finished_job, clock=None) -> int:
+    """Restate the arrival time of the technician's remaining Assigned stops (ADR-031).
+
+    Called after a job is completed or returned incomplete. The technician is free now,
+    at that job's address, so a job that ran over pushes the next stops later and one
+    that finished early pulls them sooner. Only times, slack and labels change: never
+    the technician or the order (invariant 13). A job already Ongoing, or no remaining
+    stop, means nothing to do. Returns how many stops are now late.
+    """
+    organization = technician.organization
+    now = (clock or SystemClock()).now()
+    plan_date = finished_job.scheduled_date
+    if plan_date is None:
+        return 0
+    config = org_to_config(organization)
+    with transaction.atomic():
+        remaining = list(
+            Job.objects.for_organization(organization)
+            .select_for_update()
+            .filter(
+                technician=technician,
+                status=JobStatus.ASSIGNED,
+                scheduled_date=plan_date,
+            )
+            .prefetch_related("acceptable_skills")
+            .order_by("sequence_position", "pk")
+        )
+        remaining = [j for j in remaining if j.lat is not None and j.lng is not None]
+        if not remaining:
+            return 0
+        day_opens = at_local(plan_date, organization.work_start, organization.timezone)
+        tech_view = technician_to_view(
+            technician,
+            plan_date=plan_date,
+            organization=organization,
+            workload=[],
+            now=now,
+        )
+        if finished_job.lat is not None and finished_job.lng is not None:
+            where = Location(finished_job.lat, finished_job.lng)
+        else:
+            where = tech_view.position
+        estimates = reestimate(
+            [job_to_view(j, urgent_clock_start=day_opens) for j in remaining],
+            tech_view,
+            config,
+            HaversineProvider(speed_mph=config.speed_mph),
+            now=now,
+            position=where,
+        )
+        late = 0
+        for job, est in zip(remaining, estimates, strict=True):
+            explanation = dict(job.plan_explanation or {})
+            explanation["slack_minutes"] = est.slack_minutes
+            explanation["sla_label"] = str(est.sla_label)
+            # update(): a time restatement is not an edit, so it does not bump `version`.
+            Job.objects.filter(pk=job.pk).update(
+                estimated_arrival=est.estimated_arrival, plan_explanation=explanation
+            )
+            late += est.slack_minutes < 0
+        log.info(
+            "re-estimate: technician %s, %d stops, %d late",
+            technician.pk,
+            len(remaining),
+            late,
+        )
+        return late
