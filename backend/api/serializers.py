@@ -763,3 +763,11 @@ class DayMetricsSerializer(serializers.Serializer):
     in_queue = serializers.IntegerField()
     plan = PlanMetricsSerializer()
     baseline = PlanMetricsSerializer()
+
+
+class AvailableSlotSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    technician_id = serializers.IntegerField()
+    technician = serializers.CharField()
+    start = serializers.DateTimeField()
+    end = serializers.DateTimeField()

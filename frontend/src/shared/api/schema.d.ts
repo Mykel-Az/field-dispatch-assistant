@@ -206,6 +206,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/available-slots/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description When this job could be booked: the earliest start per technician per day (ADR-032). */
+        get: operations["jobs_available_slots_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}/cancel/": {
         parameters: {
             query?: never;
@@ -628,6 +645,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AvailableSlot: {
+            /** Format: date */
+            date: string;
+            technician_id: number;
+            technician: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+        };
         /**
          * @description * `hvac` - HVAC
          *     * `electrical` - Electrical
@@ -879,6 +906,21 @@ export interface components {
             readonly id: number;
             name: string;
             timezone?: components["schemas"]["TimezoneEnum"];
+        };
+        PaginatedAvailableSlotList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["AvailableSlot"][];
         };
         PaginatedJobList: {
             /** @example 123 */
@@ -1471,6 +1513,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_available_slots_list: {
+        parameters: {
+            query?: {
+                /** @description 1 to 14 */
+                days?: number;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAvailableSlotList"];
                 };
             };
         };

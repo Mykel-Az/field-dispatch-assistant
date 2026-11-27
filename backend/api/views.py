@@ -35,6 +35,7 @@ from .permissions import (
 )
 from .serializers import (
     GENERIC_LOGIN_ERROR,
+    AvailableSlotSerializer,
     ChangePasswordSerializer,
     DayMetricsSerializer,
     ForceAssignResultSerializer,
@@ -570,6 +571,29 @@ class JobViewSet(
                 "dry_run": result.dry_run,
             }
         )
+
+    @extend_schema(
+        parameters=[OpenApiParameter("days", OpenApiTypes.INT, description="1 to 14")],
+        responses=AvailableSlotSerializer(many=True),
+    )
+    @action(detail=True, methods=["get"], url_path="available-slots")
+    def available_slots(self, request, pk=None):
+        """When this job could be booked: the earliest start per technician per day (ADR-032)."""
+        job = self.get_object()  # 404 for another organization
+        try:
+            days = int(request.query_params.get("days", 7))
+        except ValueError:
+            raise ValidationError({"days": "Enter a whole number of days."}) from None
+        try:
+            slots = scheduling.available_slots(job=job, days=days)
+        except job_service.LocationRequired:
+            raise Conflict(
+                "Set the job's location before looking for times.",
+                code="location_required",
+            ) from None
+        except OrganizationNotConfigured as error:
+            raise Conflict(str(error), code="organization_not_configured") from None
+        return Response(AvailableSlotSerializer(slots, many=True).data)
 
     @extend_schema(request=JobUnassignSerializer, responses=JobDetailSerializer)
     @action(detail=True, methods=["post"])

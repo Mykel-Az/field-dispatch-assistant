@@ -155,6 +155,14 @@ endpoints (`test_reestimate.py`); six mutations each fail a test (the equivalent
 "ignore free_at" mutant is not killable because `now` already floors the start).
 TIME: planned, not actual, durations for later stops.
 
+### Available slots (ADR-032)
+`GET /jobs/{id}/available-slots/?days=N` answers "when could someone come?": the earliest
+start per technician per day, using the planner's filter rules and gap-fitting arrival
+(`dispatch_engine/slots.py`), with the day's opening hours as the window. Read-only; no
+UI yet. Tests: pure (`test_slots.py`) and API (`test_available_slots.py`: gaps that fit
+and do not, skills, daily limit, lookahead cap, tenant isolation, read-only); six
+mutations each fail a test.
+
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
 priority (high before low), then earliest deadline, then id; when there are not
@@ -275,7 +283,7 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 3, after metrics)
-Backend 832 tests (including 8 that need Postgres or saved Nominatim responses),
+Backend 853 tests (including 8 that need Postgres or saved Nominatim responses),
 frontend 200. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)

@@ -7,10 +7,11 @@ lifecycle, the history rows and the one-ongoing-job rule all still apply.
 Everything happens in one transaction: a failure leaves no half-planned day.
 """
 
+import dataclasses
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from django.db import transaction
 from django.db.models import F, Max, Q
@@ -30,6 +31,7 @@ from dispatch_engine.explanations import (
 from dispatch_engine.metrics import PlanMetrics, compare
 from dispatch_engine.replanning import reestimate
 from dispatch_engine.sequencing import sequence_plan
+from dispatch_engine.slots import earliest_slots
 from dispatch_engine.types import Explanation, Location
 
 from ..adapters import (
@@ -726,3 +728,76 @@ def reestimate_after_finish(*, technician, finished_job, clock=None) -> int:
             late,
         )
         return late
+
+
+MAX_SLOT_DAYS = 14
+
+
+def available_slots(*, job, days=7, clock=None):
+    """When could this job be booked? The earliest start per technician, per day (ADR-032).
+
+    Reads only. The job needs a location; its own window and status are ignored (the
+    point is to offer a time). Each day is looked at with the technicians' Assigned and
+    Ongoing jobs as commitments, so a time is only offered where it fits (ADR-027).
+    Returns dicts ordered by start: date, technician_id, technician, start, end.
+    """
+    organization = job.organization
+    if job.lat is None or job.lng is None:
+        raise job_service.LocationRequired("The job has no location yet.")
+    config = org_to_config(organization)
+    now = (clock or SystemClock()).now()
+    today = local_date(now, organization.timezone)
+    days = max(1, min(int(days), MAX_SLOT_DAYS))
+    distance = HaversineProvider(speed_mph=config.speed_mph)
+    base_view = job_to_view(job)
+
+    technicians = list(
+        Technician.objects.for_organization(organization)
+        .select_related("user")
+        .prefetch_related("skills")
+        .order_by("id")
+    )
+    dates = [today + timedelta(days=n) for n in range(days)]
+    workload = defaultdict(list)
+    for held in (
+        Job.objects.for_organization(organization)
+        .filter(
+            status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING],
+            scheduled_date__in=dates,
+            technician__isnull=False,
+        )
+        .exclude(pk=job.pk)
+    ):
+        workload[(held.technician_id, held.scheduled_date)].append(held)
+
+    offered = []
+    for day in dates:
+        # No agreed time yet: any time the business is open that day (ADR-021).
+        opens, closes = job_service.opening_window(organization, day)
+        wanted = dataclasses.replace(
+            base_view, slot_start=opens, slot_end=closes, is_urgent=False
+        )
+        views = [
+            technician_to_view(
+                t,
+                plan_date=day,
+                organization=organization,
+                workload=workload[(t.pk, day)],
+                now=now,
+            )
+            for t in technicians
+        ]
+        names = {t.pk: t.user.full_name or t.user.email for t in technicians}
+        for slot in earliest_slots(
+            wanted, views, distance, now, config.max_jobs_per_tech_per_day
+        ):
+            offered.append(
+                {
+                    "date": day,
+                    "technician_id": slot.technician_id,
+                    "technician": names[slot.technician_id],
+                    "start": slot.start,
+                    "end": slot.end,
+                }
+            )
+    return sorted(offered, key=lambda o: (o["start"], o["technician_id"]))

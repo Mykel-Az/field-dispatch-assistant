@@ -340,6 +340,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/JobDetail'
           description: ''
+  /api/jobs/{id}/available-slots/:
+    get:
+      operationId: jobs_available_slots_list
+      description: 'When this job could be booked: the earliest start per technician
+        per day (ADR-032).'
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+        description: 1 to 14
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - jobs
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAvailableSlotList'
+          description: ''
   /api/jobs/{id}/cancel/:
     post:
       operationId: jobs_cancel_create
@@ -1065,6 +1099,28 @@ paths:
           description: No response body
 components:
   schemas:
+    AvailableSlot:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        technician_id:
+          type: integer
+        technician:
+          type: string
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+      required:
+      - date
+      - end
+      - start
+      - technician
+      - technician_id
     CategoryEnum:
       enum:
       - hvac
@@ -1775,6 +1831,29 @@ components:
       required:
       - id
       - name
+    PaginatedAvailableSlotList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailableSlot'
     PaginatedJobList:
       type: object
       required:
