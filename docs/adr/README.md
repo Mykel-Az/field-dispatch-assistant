@@ -37,3 +37,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [030](030-before-after-metrics-against-round-robin.md) | Measure the plan against a round-robin baseline |
 | [031](031-replan-on-overrun-and-unavailable-technician.md) | Restate the day when a job runs over; plan again when a technician drops out |
 | [032](032-available-slots-for-a-new-job.md) | Offer times for a new job (read-only available slots) |
+| [033](033-dark-mode-from-design-tokens.md) | Dark mode by redefining the design tokens |

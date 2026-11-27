@@ -160,12 +160,15 @@ describe('AppLayout drawer', () => {
 });
 
 describe('AppLayout for a technician', () => {
-  it('has no menu to open, just the brand and Sign out', async () => {
+  it('has no menu to open, just the brand, the theme switch and Sign out', async () => {
     auth.role = 'technician';
     await mount('/tech');
     expect(menuButton()).toBeNull();
     expect(host.querySelector('aside')).toBeNull();
     expect(host.querySelector('header')!.textContent).toContain('Brightline');
-    expect([...host.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Sign out']);
+    expect([...host.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Dark mode: off',
+      'Sign out',
+    ]);
   });
 });

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import { ROLE_LABEL } from '../shared/api/models';
 import { initOrgTimezone } from '../shared/jobTime';
 import { useOrgTimezone } from '../shared/useOrgTimezone';
+import ThemeToggle from '../shared/components/ThemeToggle';
 import { ui } from '../shared/ui';
 import NavDrawer from './NavDrawer';
 import { navItems } from './navItems';
@@ -63,6 +64,7 @@ export default function AppLayout() {
       <span className="text-sm text-ink-muted">
         {user.full_name} · {ROLE_LABEL[user.role]}
       </span>
+      <ThemeToggle />
       <button className={ui.btnSmall} onClick={leave}>Sign out</button>
     </div>
   );
@@ -104,6 +106,7 @@ export default function AppLayout() {
               <span className="hidden text-sm text-ink-muted sm:inline">
                 {user.full_name} · {ROLE_LABEL[user.role]}
               </span>
+              <ThemeToggle />
               <button className={ui.btnSmall} onClick={leave}>Sign out</button>
             </>
           )}

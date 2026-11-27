@@ -58,6 +58,94 @@
   --st-canceled-pin: #64748b; /* slate */
 }
 
+/*
+ * Dark theme: the same variables, new values (every text pair is at least 4.5:1,
+ * input borders 3:1; checked with a script, see docs/design-and-testing.md).
+ * It applies when the person chose it (data-theme="dark", set by shared/theme.ts),
+ * or when they have not chosen and the system prefers dark. The two blocks must stay
+ * identical.
+ */
+:root[data-theme='dark'] {
+  /* surfaces and text */
+  --canvas: #14120f;
+  --surface: #1f1c18;
+  --line: #3a352e;
+  --line-strong: #8f8678; /* input borders: 4.7:1 against the surface */
+  --ink: #f3eee6;
+  --ink-muted: #b4aa9c;
+
+  /* brand */
+  --brand: #2dd4bf;
+  --brand-hover: #5eead4;
+  --brand-soft: #123a36;
+  --brand-ink: #99f6e4;
+  --on-brand: #0b1f1d;
+
+  /* feedback */
+  --danger: #f87171;
+  --danger-soft: #3b1514;
+  --warn-soft: #3a2a0b;
+  --warn-ink: #fcd34d;
+
+  /* job status badges (the map pins keep their colours: they sit on light map tiles) */
+  --st-unassigned-soft: #3a210c;
+  --st-unassigned: #fdba74;
+  --st-assigned-soft: #14284d;
+  --st-assigned: #93c5fd;
+  --st-ongoing-soft: #2a1c4d;
+  --st-ongoing: #c4b5fd;
+  --st-completed-soft: #11301c;
+  --st-completed: #86efac;
+  --st-incomplete-soft: #35300a;
+  --st-incomplete: #fde047;
+  --st-failed-soft: #3d1414;
+  --st-failed: #fca5a5;
+  --st-canceled-soft: #262b33;
+  --st-canceled: #cbd5e1;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    /* surfaces and text */
+    --canvas: #14120f;
+    --surface: #1f1c18;
+    --line: #3a352e;
+    --line-strong: #8f8678; /* input borders: 4.7:1 against the surface */
+    --ink: #f3eee6;
+    --ink-muted: #b4aa9c;
+
+    /* brand */
+    --brand: #2dd4bf;
+    --brand-hover: #5eead4;
+    --brand-soft: #123a36;
+    --brand-ink: #99f6e4;
+    --on-brand: #0b1f1d;
+
+    /* feedback */
+    --danger: #f87171;
+    --danger-soft: #3b1514;
+    --warn-soft: #3a2a0b;
+    --warn-ink: #fcd34d;
+
+    /* job status badges (the map pins keep their colours: they sit on light map tiles) */
+    --st-unassigned-soft: #3a210c;
+    --st-unassigned: #fdba74;
+    --st-assigned-soft: #14284d;
+    --st-assigned: #93c5fd;
+    --st-ongoing-soft: #2a1c4d;
+    --st-ongoing: #c4b5fd;
+    --st-completed-soft: #11301c;
+    --st-completed: #86efac;
+    --st-incomplete-soft: #35300a;
+    --st-incomplete: #fde047;
+    --st-failed-soft: #3d1414;
+    --st-failed: #fca5a5;
+    --st-canceled-soft: #262b33;
+    --st-canceled: #cbd5e1;
+    color-scheme: dark;
+  }
+}
+
 @theme inline {
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
 

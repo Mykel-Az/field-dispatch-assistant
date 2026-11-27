@@ -284,7 +284,7 @@ backend against Postgres 16.
 
 ### Current size (collected, Sprint 3, after metrics)
 Backend 853 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 200. Per-file counts: `pytest --collect-only -q`.
+frontend 207. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.
@@ -333,6 +333,15 @@ layout screens.
   hand, not by CI.
 - The time zone rule has a small race window (ADR-024).
 - Real Nominatim responses are saved by a script run by hand; CI never calls it.
+
+## Dark mode (ADR-033)
+The dark theme is a second set of the design-token variables in `index.css`; components
+are unchanged. It follows the system until the person uses the switch (sidebar, drawer,
+technician bar); the choice is kept on the device and applied before first paint.
+Contrast was checked with a script (all text pairs at least 4.5:1, borders 3:1).
+Tests: `theme.test.ts` (system, choice, saved value, unknown value, blocked storage),
+`ThemeToggle.test.tsx`, and the layout test. Checked in a browser at 360 and 1280 in
+both themes: no horizontal overflow. Known limit: map tiles and pins stay light.
 
 ## Responsive layout (S2-9)
 One rule: the app works at 360px wide first and gains room, it is not shrunk down
