@@ -18,14 +18,28 @@ from django.utils import timezone
 
 from dispatch_engine import lifecycle as lc
 from dispatch_engine.assignment import assign_jobs
+from dispatch_engine.bumping import BumpCandidate, pick_bump, urgent_fit
 from dispatch_engine.clock import Clock, FixedClock, SystemClock
 from dispatch_engine.distance import HaversineProvider
-from dispatch_engine.explanations import assignment_sentence, unassigned_sentence
+from dispatch_engine.explanations import (
+    assignment_sentence,
+    explain_forced,
+    forced_sentence,
+    unassigned_sentence,
+)
 from dispatch_engine.sequencing import sequence_plan
 from dispatch_engine.types import Explanation
 
-from ..adapters import at_local, job_to_view, org_to_config, technician_to_view
+from ..adapters import (
+    _PRIORITY,
+    at_local,
+    job_to_view,
+    org_to_config,
+    technician_to_view,
+)
+from ..exceptions import Conflict
 from ..models import GeocodeStatus, Job, JobStatus, Organization, Technician
+from . import jobs as job_service
 from .jobs import local_date, transition
 
 log = logging.getLogger(__name__)
@@ -397,3 +411,183 @@ def _renumber_stops(
         day.update(sequence_position=F("sequence_position") + _STOP_SHIFT)
         for number, job in enumerate(jobs, start=1):
             Job.objects.filter(pk=job.pk).update(sequence_position=number)
+
+
+# ---- force-assign an urgent job (ADR-029) ------------------------------------------
+class JobNotUrgent(Exception):
+    """Force-assign is only for urgent jobs; a normal job is assigned the usual way."""
+
+
+@dataclass(frozen=True)
+class ForceAssignResult:
+    job: Job
+    bumped_job_ids: list[int]  # sent back to the queue (in a dry run: would be)
+    estimated_arrival: datetime
+    sla_label: str
+    slack_minutes: float
+    dry_run: bool
+
+
+def _bump_slack(job: Job) -> float:
+    """Minutes the job could still wait and meet its own window (0 if it has none)."""
+    if job.slot_end is None:
+        return 0.0
+    planned = job.estimated_arrival or job.slot_start or job.slot_end
+    return (job.slot_end - planned).total_seconds() / 60
+
+
+def force_assign(
+    *,
+    job: Job,
+    technician: Technician,
+    actor,
+    client_version: int,
+    dry_run: bool = False,
+    clock: Clock | None = None,
+) -> ForceAssignResult:
+    """Give an urgent job to `technician`, bumping jobs they have not started if needed.
+
+    If the technician would reach the job after its deadline, the jobs that help most
+    are sent back to the queue one at a time (lowest priority, then most slack), until
+    the urgent job fits or no bump would help. Started jobs are never touched, and
+    neither is another urgent job. Not finding a way to make the deadline is an expected
+    outcome, not an error: the job is still assigned and shown as late. With
+    `dry_run` nothing is written, so the dialog can show what would happen.
+    """
+    organization = job.organization
+    config = org_to_config(organization)
+    now = (clock or SystemClock()).now()
+    distance = HaversineProvider(speed_mph=config.speed_mph)
+
+    with transaction.atomic():
+        # Same lock as a planner run: they take turns, so neither sees a stale day.
+        Organization.objects.select_for_update().get(pk=organization.pk)
+        locked = (
+            Job.objects.select_for_update()
+            .prefetch_related("acceptable_skills")
+            .get(pk=job.pk)
+        )
+        if client_version != locked.version:
+            raise Conflict(
+                "This job was changed by someone else. Reload it.",
+                code="stale_version",
+            )
+        if not locked.is_urgent:
+            raise JobNotUrgent()
+        if locked.status != JobStatus.UNASSIGNED:
+            raise job_service.IllegalJobTransition(
+                f"a {locked.status} job cannot be assigned"
+            )
+        if not _is_located(locked):
+            raise job_service.LocationRequired("the job has no usable location yet")
+
+        plan_date = locked.scheduled_date
+        day_opens = at_local(plan_date, organization.work_start, organization.timezone)
+        view = job_to_view(locked, urgent_clock_start=day_opens)
+        workload = list(
+            Job.objects.for_organization(organization)
+            .select_for_update()
+            .filter(
+                technician=technician,
+                status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING],
+                scheduled_date=plan_date,
+            )
+            .order_by("id")
+        )
+        movable = {
+            j.pk: j
+            for j in workload
+            if j.status == JobStatus.ASSIGNED and not j.is_urgent
+        }
+
+        def tech_view(held: list[Job]):
+            return technician_to_view(
+                technician,
+                plan_date=plan_date,
+                organization=organization,
+                workload=held,
+                now=now,
+            )
+
+        bumped: list[int] = []
+        held = workload
+        current = tech_view(held)
+        fit = urgent_fit(view, current, config, distance, now)
+        while not fit.meets_deadline:
+            # Only a bump that actually brings the technician sooner is worth making.
+            helpful = []
+            for pk, candidate in movable.items():
+                if pk in bumped:
+                    continue
+                without = [j for j in held if j.pk != pk]
+                trial = urgent_fit(view, tech_view(without), config, distance, now)
+                if trial.arrival < fit.arrival:
+                    helpful.append(
+                        BumpCandidate(
+                            pk, _PRIORITY[candidate.priority], _bump_slack(candidate)
+                        )
+                    )
+            pick = pick_bump(helpful)
+            if pick is None:
+                break  # nothing more can be done: assign anyway and show it as late
+            bumped.append(pick)
+            held = [j for j in held if j.pk != pick]
+            current = tech_view(held)
+            fit = urgent_fit(view, current, config, distance, now)
+
+        if dry_run:
+            return ForceAssignResult(
+                locked, bumped, fit.arrival, str(fit.label), fit.slack_minutes, True
+            )
+
+        for pk in bumped:
+            job_service.transition(
+                Job.objects.get(pk=pk),
+                lc.UNASSIGNED,
+                actor,
+                reason=f"Bumped by urgent job #{locked.pk}",
+            )
+        assigned = job_service.transition(
+            locked,
+            lc.ASSIGNED,
+            actor,
+            reason=f"Forced assignment ({len(bumped)} job(s) bumped)",
+            technician=technician,
+            client_version=client_version,
+        )
+        explanation = explain_forced(
+            view,
+            current,
+            travel_minutes=fit.travel_minutes,
+            slack_minutes=fit.slack_minutes,
+            label=fit.label,
+            bumped_count=len(bumped),
+        )
+        assigned.estimated_arrival = fit.arrival
+        assigned.plan_explanation = {
+            "reasons": reasons_as_data(explanation),
+            "sentence": forced_sentence(explanation, locked.title, current.label),
+            "sla_label": str(fit.label),
+            "slack_minutes": fit.slack_minutes,
+        }
+        assigned.save(
+            update_fields=["estimated_arrival", "plan_explanation", "updated_at"]
+        )
+        _renumber_stops(organization, plan_date, {technician.pk}, now)
+
+    log.info(
+        "force-assign: org %s, job %s to technician %s, %d bumped, slack %.0f min",
+        organization.pk,
+        locked.pk,
+        technician.pk,
+        len(bumped),
+        fit.slack_minutes,
+    )
+    return ForceAssignResult(
+        Job.objects.get(pk=locked.pk),
+        bumped,
+        fit.arrival,
+        str(fit.label),
+        fit.slack_minutes,
+        False,
+    )

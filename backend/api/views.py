@@ -34,6 +34,7 @@ from .permissions import (
 from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
+    ForceAssignResultSerializer,
     GeocodeLookupSerializer,
     GeocodeResultSerializer,
     HealthSerializer,
@@ -42,6 +43,7 @@ from .serializers import (
     JobCreateSerializer,
     JobDetailSerializer,
     JobFilterSerializer,
+    JobForceAssignSerializer,
     JobPinSerializer,
     JobSerializer,
     JobUnassignSerializer,
@@ -507,6 +509,64 @@ class JobViewSet(
                 "Set the job's location before assigning it.", code="location_required"
             ) from None
         return self._detail(updated)
+
+    @extend_schema(
+        request=JobForceAssignSerializer, responses=ForceAssignResultSerializer
+    )
+    @action(detail=True, methods=["post"], url_path="force-assign")
+    def force_assign(self, request, pk=None):
+        """Give an urgent job to a chosen technician now, sending back the jobs they have
+        not started that stand in the way (ADR-029). `dry_run` only reports them."""
+        job = self.get_object()  # 404 for another organization
+        serializer = JobForceAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        technician = (
+            Technician.objects.for_organization(request.user.organization)
+            .select_related("user")
+            .filter(pk=data["technician_id"])
+            .first()
+        )
+        if technician is None:
+            raise ValidationError({"technician_id": "Unknown technician."})
+        if not technician.user.is_active:
+            raise Conflict(
+                "That technician is deactivated.", code="technician_inactive"
+            )
+        try:
+            result = scheduling.force_assign(
+                job=job,
+                technician=technician,
+                actor=request.user,
+                client_version=data["version"],
+                dry_run=data["dry_run"],
+            )
+        except scheduling.JobNotUrgent:
+            raise Conflict(
+                "Force-assign is for urgent jobs. Use Assign for this one.",
+                code="not_urgent",
+            ) from None
+        except job_service.IllegalJobTransition:
+            raise Conflict(
+                f"A {job.status} job cannot be assigned.", code="illegal_transition"
+            ) from None
+        except job_service.LocationRequired:
+            raise Conflict(
+                "Set the job's location before assigning it.", code="location_required"
+            ) from None
+        except OrganizationNotConfigured as error:
+            raise Conflict(str(error), code="organization_not_configured") from None
+        fresh = self.get_queryset().get(pk=result.job.pk)
+        return Response(
+            {
+                "job": JobDetailSerializer(fresh).data,
+                "bumped_job_ids": result.bumped_job_ids,
+                "estimated_arrival": result.estimated_arrival,
+                "sla_label": result.sla_label,
+                "slack_minutes": result.slack_minutes,
+                "dry_run": result.dry_run,
+            }
+        )
 
     @extend_schema(request=JobUnassignSerializer, responses=JobDetailSerializer)
     @action(detail=True, methods=["post"])

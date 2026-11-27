@@ -125,6 +125,59 @@ def explain_stop(
     return Explanation((kept[0], *after_assigned, *kept[1:]))
 
 
+def explain_forced(
+    job: JobView,
+    tech: TechView,
+    *,
+    travel_minutes: float,
+    slack_minutes: float,
+    label: SlaLabel,
+    bumped_count: int,
+) -> Explanation:
+    """Why an urgent job is with this technician: a dispatcher chose them (ADR-029)."""
+    slack = math.floor(slack_minutes)
+    reasons = [
+        Reason(
+            ReasonCode.FORCED_ASSIGN,
+            {
+                "job_id": job.id,
+                "technician_id": tech.id,
+                "travel_minutes": round(travel_minutes),
+                "slack_minutes": slack,
+                "bumped_count": bumped_count,
+            },
+        )
+    ]
+    if label == SlaLabel.AT_RISK:
+        reasons.append(Reason(ReasonCode.SLA_AT_RISK, {"slack_minutes": slack}))
+    elif label == SlaLabel.BREACH:
+        reasons.append(Reason(ReasonCode.SLA_BREACH, {"late_minutes": -slack}))
+    return Explanation(tuple(reasons))
+
+
+def forced_sentence(explanation: Explanation, job_label: str, tech_label: str) -> str:
+    """Plain English over the facts of `explain_forced`."""
+    forced = _first(explanation, ReasonCode.FORCED_ASSIGN)
+    assert forced is not None, "a forced assignment always carries FORCED_ASSIGN"
+    breach = _first(explanation, ReasonCode.SLA_BREACH)
+    at_risk = _first(explanation, ReasonCode.SLA_AT_RISK)
+    if breach:
+        timing = f"will arrive {breach['late_minutes']} min after the deadline"
+    elif at_risk:
+        timing = f"will arrive with only {at_risk['slack_minutes']} min to spare"
+    else:
+        timing = f"will arrive with {forced['slack_minutes']} min to spare"
+    parts = [
+        f"“{job_label}” was given to {tech_label} by a dispatcher: {forced['travel_minutes']} min away, {timing}."
+    ]
+    n = int(forced["bumped_count"])
+    if n:
+        parts.append(
+            f"To make room, {n} lower-priority job{'s were' if n != 1 else ' was'} sent back to the queue."
+        )
+    return " ".join(parts)
+
+
 def explain_unassigned(
     job: JobView, rejected: Iterable[Rejection], technicians_checked: int
 ) -> Explanation:

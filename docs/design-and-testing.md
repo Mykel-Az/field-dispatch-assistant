@@ -123,6 +123,17 @@ dispatcher map draws one dashed line per technician and day in the order it runs
 The lines are straight, not roads. TIME: greedy per technician; gap choice does not
 look at total driving (full fidelity: solve order and gaps together).
 
+### Urgent force-assign (ADR-029)
+A dispatcher picks a technician for an urgent job. The server first answers a dry run:
+when the technician would arrive, and which jobs they have not started would have to go
+back to the queue (lowest priority first, then most slack, and only a job whose removal
+helps). Started jobs and other urgent jobs are never touched. The dispatcher confirms in
+the same dialog; the urgent job is assigned (late is allowed and flagged), the bumped
+jobs return to the queue with a history reason, and the day is renumbered. Tests:
+pure bump rule and fit check (`test_bumping.py`), service and endpoint
+(`test_force_assign.py`), and a concurrent race test on Postgres (it fails every time if
+the row locks are removed). TIME: greedy choice of what to bump.
+
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
 priority (high before low), then earliest deadline, then id; when there are not
@@ -243,8 +254,8 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 3, after sequencing)
-Backend 767 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 186. Per-file counts: `pytest --collect-only -q`.
+Backend 799 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 193. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.

@@ -376,6 +376,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/JobDetail'
           description: ''
+  /api/jobs/{id}/force-assign/:
+    post:
+      operationId: jobs_force_assign_create
+      description: |-
+        Give an urgent job to a chosen technician now, sending back the jobs they have
+        not started that stand in the way (ADR-029). `dry_run` only reports them.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this job.
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobForceAssign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobForceAssign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobForceAssign'
+        required: true
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForceAssignResult'
+          description: ''
   /api/jobs/{id}/location/:
     post:
       operationId: jobs_location_create
@@ -1027,6 +1063,32 @@ components:
       required:
       - current_password
       - new_password
+    ForceAssignResult:
+      type: object
+      properties:
+        job:
+          $ref: '#/components/schemas/JobDetail'
+        bumped_job_ids:
+          type: array
+          items:
+            type: integer
+        estimated_arrival:
+          type: string
+          format: date-time
+        sla_label:
+          type: string
+        slack_minutes:
+          type: number
+          format: double
+        dry_run:
+          type: boolean
+      required:
+      - bumped_job_ids
+      - dry_run
+      - estimated_arrival
+      - job
+      - sla_label
+      - slack_minutes
     GeocodeLookup:
       type: object
       properties:
@@ -1382,6 +1444,23 @@ components:
       - status
       - technician
       - title
+      - version
+    JobForceAssign:
+      type: object
+      description: POST /jobs/{id}/force-assign/. `dry_run` asks what would be bumped,
+        and writes nothing.
+      properties:
+        technician_id:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          minimum: 1
+        dry_run:
+          type: boolean
+          default: false
+      required:
+      - technician_id
       - version
     JobHistory:
       type: object

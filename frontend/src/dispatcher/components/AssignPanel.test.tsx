@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   fetchTechnicians: vi.fn(),
   fetchOrganization: vi.fn(),
   fetchMapJobs: vi.fn(),
+  forceAssignJob: vi.fn(),
+  fetchJob: vi.fn(),
 }));
 vi.mock('../../shared/api/client', () => api);
 
@@ -100,5 +102,24 @@ describe('AssignPanel daily limit hints', () => {
     api.fetchMapJobs.mockResolvedValue({ results: [pin(10, 1)], truncated: true });
     await mount(job());
     expect(host.textContent).not.toContain('that day');
+  });
+});
+
+describe('AssignPanel urgent jobs', () => {
+  it('offers force-assign only for an urgent job once a technician is chosen', async () => {
+    api.forceAssignJob.mockResolvedValue({
+      job: job(), bumped_job_ids: [], estimated_arrival: '2026-11-17T15:40:00Z',
+      sla_label: 'ok', slack_minutes: 30, dry_run: true,
+    });
+    await mount(job({ is_urgent: true }));
+    expect(host.textContent).not.toContain('Urgent: send');
+    await choose('Sam');
+    expect(host.textContent).toContain('Urgent: send Sam now');
+  });
+
+  it('does not offer it for a normal job', async () => {
+    await mount(job());
+    await choose('Sam');
+    expect(host.textContent).not.toContain('Urgent: send');
   });
 });

@@ -33,3 +33,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [026](026-the-plan-respects-jobs-already-on-the-day.md) | New jobs are planned around what a technician already has; Plan again |
 | [027](027-new-jobs-fit-in-the-gaps-between-fixed-jobs.md) | New jobs fit in the gaps between a technician's fixed jobs |
 | [028](028-sequencing-nearest-next-never-later.md) | Sequence each technician's day nearest-next, and never make it later |
+| [029](029-force-assign-urgent-job-and-bump.md) | Force-assign an urgent job, bumping what stands in the way |

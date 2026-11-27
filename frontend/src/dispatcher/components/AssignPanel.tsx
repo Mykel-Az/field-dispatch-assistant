@@ -11,6 +11,7 @@ import type { JobDetail, Technician } from '../../shared/api/models';
 import { NO_FILTERS } from '../../shared/filters';
 import { splitLocal } from '../../shared/jobTime';
 import { notifyJobsChanged } from '../../shared/usePolling';
+import ForceAssignPanel from './ForceAssignPanel';
 import { countByTechnician, limitWarning, loadText } from './loadModel';
 import { ui } from '../../shared/ui';
 
@@ -204,8 +205,17 @@ export default function AssignPanel({ job, onChanged }: Props) {
               {error}
             </p>
           )}
+          {job.is_urgent && pickedTech && (
+            <ForceAssignPanel
+              key={`${pickedTech.id}:${job.version}`}
+              job={job}
+              technicianId={pickedTech.id}
+              technicianName={pickedTech.user.full_name}
+              onChanged={onChanged}
+            />
+          )}
           <button
-            className={`${ui.btn} mt-3`}
+            className={`${job.is_urgent ? ui.btnOutline : ui.btn} mt-3`}
             disabled={busy || picked === null}
             onClick={() =>
               picked !== null &&

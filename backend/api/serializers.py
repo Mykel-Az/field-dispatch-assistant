@@ -549,6 +549,23 @@ class JobAssignSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class JobForceAssignSerializer(serializers.Serializer):
+    """POST /jobs/{id}/force-assign/. `dry_run` asks what would be bumped, and writes nothing."""
+
+    technician_id = serializers.IntegerField(min_value=1)
+    version = serializers.IntegerField(min_value=1)
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+
+class ForceAssignResultSerializer(serializers.Serializer):
+    job = JobDetailSerializer()
+    bumped_job_ids = serializers.ListField(child=serializers.IntegerField())
+    estimated_arrival = serializers.DateTimeField()
+    sla_label = serializers.CharField()
+    slack_minutes = serializers.FloatField()
+    dry_run = serializers.BooleanField()
+
+
 class TechnicianJobSerializer(serializers.ModelSerializer):
     """What a technician sees of their own job: what they need in the field, and
     nothing the office uses to run the plan (no history, version or explanation)."""

@@ -23,6 +23,7 @@ OBJECT_ID_FOR = {
     "/api/jobs/{pk}/cancel/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/assign/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/unassign/": lambda owner: make_job(owner.organization).pk,
+    "/api/jobs/{pk}/force-assign/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/location/": lambda owner: make_job(owner.organization).pk,
     "/api/jobs/{pk}/retry-geocode/": lambda owner: make_job(owner.organization).pk,
     "/api/technician/me/jobs/{pk}/arrive/": lambda owner: (

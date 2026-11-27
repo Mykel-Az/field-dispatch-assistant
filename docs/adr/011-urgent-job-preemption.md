@@ -29,3 +29,7 @@ existing "unavailable technician" exception.
 > **Amendment 2026-10-13:** `force-assign` is allowed for dispatchers and head
 > dispatchers; technicians get 403. The target technician must belong to the
 > caller's organization (otherwise 404).
+
+> **Amendment (Nov 27):** built as described in [ADR-029](029-force-assign-urgent-job-and-bump.md):
+> a dry-run preview, only bumps that help, started jobs never bumped, and bumped jobs wait in
+> the queue for the next Plan instead of being re-planned automatically.

@@ -226,6 +226,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{id}/force-assign/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Give an urgent job to a chosen technician now, sending back the jobs they have
+         *     not started that stand in the way (ADR-029). `dry_run` only reports them.
+         */
+        post: operations["jobs_force_assign_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{id}/location/": {
         parameters: {
             query?: never;
@@ -598,6 +618,16 @@ export interface components {
             current_password: string;
             new_password: string;
         };
+        ForceAssignResult: {
+            job: components["schemas"]["JobDetail"];
+            bumped_job_ids: number[];
+            /** Format: date-time */
+            estimated_arrival: string;
+            sla_label: string;
+            /** Format: double */
+            slack_minutes: number;
+            dry_run: boolean;
+        };
         GeocodeLookup: {
             /** @default  */
             address: string;
@@ -716,6 +746,13 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
             readonly history: components["schemas"]["JobHistory"][];
+        };
+        /** @description POST /jobs/{id}/force-assign/. `dry_run` asks what would be bumped, and writes nothing. */
+        JobForceAssign: {
+            technician_id: number;
+            version: number;
+            /** @default false */
+            dry_run: boolean;
         };
         JobHistory: {
             readonly id: number;
@@ -1422,6 +1459,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["JobDetail"];
+                };
+            };
+        };
+    };
+    jobs_force_assign_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this job. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobForceAssign"];
+                "application/x-www-form-urlencoded": components["schemas"]["JobForceAssign"];
+                "multipart/form-data": components["schemas"]["JobForceAssign"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForceAssignResult"];
                 };
             };
         };

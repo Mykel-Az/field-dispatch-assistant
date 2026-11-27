@@ -89,6 +89,15 @@ export const assignJob = (id: number, technicianId: number, version: number) =>
 export const unassignJob = (id: number, version: number) =>
   post<JobDetail>(`/jobs/${id}/unassign/`, { version });
 
+/** What force-assigning an urgent job did (or, with `dry_run`, would do). */
+export type ForceAssignResult = components['schemas']['ForceAssignResult'];
+export const forceAssignJob = (id: number, technicianId: number, version: number, dryRun = false) =>
+  post<ForceAssignResult>(`/jobs/${id}/force-assign/`, {
+    technician_id: technicianId,
+    version,
+    dry_run: dryRun,
+  });
+
 // --- the technician's own day (technician role only) ---
 /** My jobs for a day in visiting order (default: today on the organization's clock). */
 export const fetchMyJobs = (date?: string) =>
