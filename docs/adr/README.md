@@ -34,3 +34,4 @@ New decisions get the next number; superseded ADRs are marked, not deleted.
 | [027](027-new-jobs-fit-in-the-gaps-between-fixed-jobs.md) | New jobs fit in the gaps between a technician's fixed jobs |
 | [028](028-sequencing-nearest-next-never-later.md) | Sequence each technician's day nearest-next, and never make it later |
 | [029](029-force-assign-urgent-job-and-bump.md) | Force-assign an urgent job, bumping what stands in the way |
+| [030](030-before-after-metrics-against-round-robin.md) | Measure the plan against a round-robin baseline |

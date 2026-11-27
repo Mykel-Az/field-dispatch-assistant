@@ -86,6 +86,8 @@ export const ROLE_LABEL: Record<Role, string> = {
 };
 
 // --- jobs: derived from the generated schema (`npm run api:types`) ---
+export type DayMetrics = components['schemas']['DayMetrics'];
+export type PlanMetrics = components['schemas']['PlanMetrics'];
 export type ScheduleResult = components['schemas']['ScheduleResult'];
 export type PlannedJob = components['schemas']['PlannedJob'];
 export type UnplannedJob = components['schemas']['UnplannedJob'];

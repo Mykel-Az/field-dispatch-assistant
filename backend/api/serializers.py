@@ -744,3 +744,22 @@ class JobFilterSerializer(serializers.Serializer):
         if data.get("technician"):
             queryset = queryset.filter(technician_id__in=data["technician"])
         return queryset
+
+
+class PlanMetricsSerializer(serializers.Serializer):
+    jobs = serializers.IntegerField()
+    unplaced = serializers.IntegerField()
+    sla_breaches = serializers.IntegerField()
+    late_minutes = serializers.IntegerField()
+    travel_miles = serializers.FloatField()
+    min_jobs = serializers.IntegerField()
+    max_jobs = serializers.IntegerField()
+    workload_spread = serializers.IntegerField()
+
+
+class DayMetricsSerializer(serializers.Serializer):
+    plan_date = serializers.DateField()
+    jobs = serializers.IntegerField()
+    in_queue = serializers.IntegerField()
+    plan = PlanMetricsSerializer()
+    baseline = PlanMetricsSerializer()

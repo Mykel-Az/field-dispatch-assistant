@@ -134,6 +134,15 @@ pure bump rule and fit check (`test_bumping.py`), service and endpoint
 (`test_force_assign.py`), and a concurrent race test on Postgres (it fails every time if
 the row locks are removed). TIME: greedy choice of what to bump.
 
+### Before/after metrics (ADR-030)
+`GET /schedule/metrics/?date=` measures the day's placed jobs as planned and as a naive
+round-robin would have placed them (skill-aware, in request order), both timed from the
+start of the day with the engine's own rules. The plan page shows SLA breaches, minutes
+late, miles and workload spread side by side. Tests: hand-computed distances (82.8 vs
+228 miles) in `test_metrics.py` and `test_schedule_metrics.py`; mutation checks (ignore
+travel, ignore breaches, ignore skills, reverse stop order) each fail tests. Honest
+result on the demo data: fewer breaches and less lateness on 3 of 4 days, not fewer miles.
+
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
 priority (high before low), then earliest deadline, then id; when there are not
@@ -253,9 +262,9 @@ python manage.py spectacular --file schema.yml && (cd ../frontend && npm run api
 CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
-### Current size (collected, Sprint 3, after sequencing)
-Backend 799 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 193. Per-file counts: `pytest --collect-only -q`.
+### Current size (collected, Sprint 3, after metrics)
+Backend 817 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 199. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.

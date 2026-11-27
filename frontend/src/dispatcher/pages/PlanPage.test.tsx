@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   fetchJobs: vi.fn(),
   fetchMapJobs: vi.fn(),
   fetchOrganization: vi.fn(),
+  fetchScheduleMetrics: vi.fn(),
 }));
 vi.mock('../../shared/api/client', () => api);
 // Leaflet needs a real browser; the map is checked there.
@@ -36,6 +37,7 @@ beforeEach(() => {
   api.fetchTechnicians.mockReset().mockResolvedValue([]);
   api.fetchJobs.mockReset().mockResolvedValue({ results: [], next: null });
   api.fetchMapJobs.mockReset().mockResolvedValue({ results: [], truncated: false });
+  api.fetchScheduleMetrics.mockReset().mockRejectedValue(new Error('not in this test'));
   api.fetchOrganization.mockReset().mockResolvedValue({ lat: 30, lng: -97 });
   host = document.createElement('div');
   document.body.append(host);

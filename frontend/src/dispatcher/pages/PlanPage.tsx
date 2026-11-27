@@ -13,6 +13,7 @@ import type { JobRow, ScheduleResult, Technician } from '../../shared/api/models
 import { NO_FILTERS } from '../../shared/filters';
 import { useOffice } from '../../shared/map/useOffice';
 import { ui } from '../../shared/ui';
+import MetricsPanel from '../plan/MetricsPanel';
 import PlanResults from '../plan/PlanResults';
 import { addDays, MAX_DAYS_AHEAD, todayOnClock } from '../plan/planModel';
 
@@ -225,6 +226,7 @@ export default function PlanPage() {
       {outcome && (
         <>
           <h2 className="mb-3 text-xl font-bold">{dayLabel(outcome.result.plan_date)}</h2>
+          <MetricsPanel date={outcome.result.plan_date} refreshKey={outcome} />
           <PlanResults
             result={outcome.result}
             technicians={outcome.technicians}

@@ -10,6 +10,7 @@ import type {
   Organization,
   Page,
   RegisterInput,
+  DayMetrics,
   ScheduleResult,
   User,
   Technician,
@@ -63,6 +64,10 @@ export const updateTechnician = (id: number, input: TechnicianUpdate) =>
 /** What the planner last decided for a day, read back (default: today). */
 export const fetchSchedule = (date?: string) =>
   get<ScheduleResult>(`/schedule/${date ? `?date=${encodeURIComponent(date)}` : ''}`);
+
+/** The day's plan measured against a naive round-robin on the same jobs (ADR-030). */
+export const fetchScheduleMetrics = (date?: string) =>
+  get<DayMetrics>(`/schedule/metrics/${date ? `?date=${encodeURIComponent(date)}` : ''}`);
 
 /** Plan the unassigned jobs of one day (default: today on the organization's clock). */
 export const generateSchedule = (date?: string, replan = false) =>

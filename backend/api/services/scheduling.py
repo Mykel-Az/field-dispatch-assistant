@@ -27,6 +27,7 @@ from dispatch_engine.explanations import (
     forced_sentence,
     unassigned_sentence,
 )
+from dispatch_engine.metrics import PlanMetrics, compare
 from dispatch_engine.sequencing import sequence_plan
 from dispatch_engine.types import Explanation
 
@@ -591,3 +592,67 @@ def force_assign(
         fit.slack_minutes,
         False,
     )
+
+
+# ---- before and after (ADR-030) ----------------------------------------------------
+@dataclass(frozen=True)
+class DayMetrics:
+    plan_date: date
+    jobs: int
+    in_queue: int  # the day's jobs nobody has taken (not in either comparison)
+    plan: PlanMetrics
+    baseline: PlanMetrics
+
+
+def day_metrics(
+    *, organization, plan_date: date | None = None, clock: Clock | None = None
+):
+    """The plan for a day measured against a round-robin baseline on the same jobs.
+
+    Reads only; saves nothing. The jobs are the ones with a technician (so the plan
+    and the baseline do identical work); the plan is who actually has each job and in
+    which stop order. Both are timed from the start of the day with no other jobs.
+    """
+    config = org_to_config(organization)
+    now = (clock or SystemClock()).now()
+    plan_date = plan_date or local_date(now, organization.timezone)
+    distance = HaversineProvider(speed_mph=config.speed_mph)
+    day_opens = at_local(plan_date, organization.work_start, organization.timezone)
+
+    day = Job.objects.for_organization(organization).filter(scheduled_date=plan_date)
+    placed = list(
+        day.filter(
+            status__in=[JobStatus.ASSIGNED, JobStatus.ONGOING, JobStatus.COMPLETED],
+            technician__isnull=False,
+        )
+        .prefetch_related("acceptable_skills")
+        .order_by("sequence_position", "id")
+    )
+    in_queue = day.filter(status=JobStatus.UNASSIGNED).count()
+
+    technicians = list(
+        Technician.objects.for_organization(organization)
+        .select_related("user")
+        .prefetch_related("skills")
+        .filter(user__is_active=True)
+        .order_by("id")
+    )
+    tech_views = [
+        technician_to_view(
+            t,
+            plan_date=plan_date,
+            organization=organization,
+            workload=[],
+            now=day_opens,
+        )
+        for t in technicians
+    ]
+    views = {j.pk: job_to_view(j, urgent_clock_start=day_opens) for j in placed}
+    routes: dict[int, list] = defaultdict(list)
+    for j in placed:
+        routes[j.technician_id].append(views[j.pk])
+
+    plan, baseline = compare(
+        routes, views.values(), tech_views, config, distance, day_opens, plan_unplaced=0
+    )
+    return DayMetrics(plan_date, len(placed), in_queue, plan, baseline)

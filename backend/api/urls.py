@@ -12,6 +12,7 @@ from .views import (
     OrganizationView,
     RegisterView,
     ScheduleGenerateView,
+    ScheduleMetricsView,
     ScheduleView,
     SkillViewSet,
     TechnicianArriveView,
@@ -42,6 +43,7 @@ urlpatterns = [
     path("map/jobs/", MapJobsView.as_view(), name="map-jobs"),
     path("organization/", OrganizationView.as_view(), name="organization"),
     path("schedule/", ScheduleView.as_view(), name="schedule"),
+    path("schedule/metrics/", ScheduleMetricsView.as_view(), name="schedule-metrics"),
     path(
         "schedule/generate/", ScheduleGenerateView.as_view(), name="schedule-generate"
     ),

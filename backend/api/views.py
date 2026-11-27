@@ -34,6 +34,7 @@ from .permissions import (
 from .serializers import (
     GENERIC_LOGIN_ERROR,
     ChangePasswordSerializer,
+    DayMetricsSerializer,
     ForceAssignResultSerializer,
     GeocodeLookupSerializer,
     GeocodeResultSerializer,
@@ -741,6 +742,38 @@ class ScheduleView(APIView):
             plan_date=query.validated_data.get("date"),
         )
         return Response(ScheduleResultSerializer(result).data)
+
+
+class ScheduleMetricsView(APIView):
+    """GET /schedule/metrics/?date=: the day's plan next to a round-robin baseline.
+
+    Reads only. Same jobs, same technicians, timed the same way (ADR-030).
+    """
+
+    permission_classes = [IsDispatcher]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("date", OpenApiTypes.DATE, required=False)],
+        responses=DayMetricsSerializer,
+    )
+    def get(self, request):
+        query = ScheduleQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        try:
+            result = scheduling.day_metrics(
+                organization=request.user.organization,
+                plan_date=query.validated_data.get("date"),
+            )
+        except OrganizationNotConfigured as error:
+            raise Conflict(str(error), code="organization_not_configured") from None
+        data = {
+            "plan_date": result.plan_date,
+            "jobs": result.jobs,
+            "in_queue": result.in_queue,
+            "plan": result.plan,
+            "baseline": result.baseline,
+        }
+        return Response(DayMetricsSerializer(data).data)
 
 
 # ---- the technician's own day (S2-7) ------------------------------------------

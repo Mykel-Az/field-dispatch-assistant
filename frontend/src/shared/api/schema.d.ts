@@ -384,6 +384,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/schedule/metrics/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /schedule/metrics/?date=: the day's plan next to a round-robin baseline.
+         *
+         *     Reads only. Same jobs, same technicians, timed the same way (ADR-030).
+         */
+        get: operations["schedule_metrics_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/skills/": {
         parameters: {
             query?: never;
@@ -617,6 +638,14 @@ export interface components {
         ChangePassword: {
             current_password: string;
             new_password: string;
+        };
+        DayMetrics: {
+            /** Format: date */
+            plan_date: string;
+            jobs: number;
+            in_queue: number;
+            plan: components["schemas"]["PlanMetrics"];
+            baseline: components["schemas"]["PlanMetrics"];
         };
         ForceAssignResult: {
             job: components["schemas"]["JobDetail"];
@@ -945,6 +974,17 @@ export interface components {
          * @enum {string}
          */
         PlacedByEnum: "planner" | "manual";
+        PlanMetrics: {
+            jobs: number;
+            unplaced: number;
+            sla_breaches: number;
+            late_minutes: number;
+            /** Format: double */
+            travel_miles: number;
+            min_jobs: number;
+            max_jobs: number;
+            workload_spread: number;
+        };
         /** @description One structured reason: a code and the numbers behind it. */
         PlanReason: {
             code: string;
@@ -1684,6 +1724,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScheduleResult"];
+                };
+            };
+        };
+    };
+    schedule_metrics_retrieve: {
+        parameters: {
+            query?: {
+                date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DayMetrics"];
                 };
             };
         };
