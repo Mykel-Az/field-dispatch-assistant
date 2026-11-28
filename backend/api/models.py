@@ -224,9 +224,30 @@ class Skill(models.Model):
 
 
 class JobCategory(models.TextChoices):
-    HVAC = "hvac", "HVAC"
-    ELECTRICAL = "electrical", "Electrical"
-    APPLIANCE = "appliance", "Appliance repair"
+    """The trade a job belongs to. Each has a specialist skill (CandidateSkillRule)."""
+
+    HVAC = "hvac", "Heating & Air Conditioning"
+    ELECTRICAL = "electrical", "Electricians"
+    APPLIANCE = "appliance", "Appliances and Repair"
+    HANDYMAN = "handyman", "Contractors & Handymen"
+    PLUMBING = "plumbing", "Plumbers"
+    ROOFING = "roofing", "Roofing"
+    LOCKSMITH = "locksmith", "Locksmiths"
+    PAINTING = "painting", "Painters"
+    LANDSCAPING = "landscaping", "Landscaping"
+    GARDENING = "gardening", "Nurseries & Gardening"
+    FLORIST = "florist", "Florists"
+    TREE_SERVICE = "tree_service", "Tree Services"
+    CLEANING = "cleaning", "Home Cleaning"
+    FURNITURE = "furniture", "Furniture Stores"
+    MOVERS = "movers", "Movers"
+
+
+class JobComplexity(models.TextChoices):
+    """Minor jobs may also go to the helper skills of the category (ADR-034)."""
+
+    MINOR = "minor", "Minor"
+    MAJOR = "major", "Major"
 
 
 class JobPriority(models.TextChoices):
@@ -250,6 +271,8 @@ class JobStatus(models.TextChoices):
 
 class CandidateSkillRule(models.Model):  # global, like Skill
     category = models.CharField(max_length=20, choices=JobCategory.choices)
+    # False: the specialist, always allowed. True: a helper, allowed only for minor jobs.
+    minor_only = models.BooleanField(default=False)
     skill = models.ForeignKey(
         "Skill", on_delete=models.PROTECT, related_name="category_rules"
     )
@@ -270,6 +293,9 @@ class Job(AddressMixin, TenantScopedModel):
         max_length=20, blank=True, null=True, validators=[phone_validator]
     )
     category = models.CharField(max_length=20, choices=JobCategory.choices)
+    complexity = models.CharField(
+        max_length=5, choices=JobComplexity.choices, default=JobComplexity.MAJOR
+    )
     is_urgent = models.BooleanField(default=False)
     priority = models.CharField(
         max_length=10, choices=JobPriority.choices, default=JobPriority.NORMAL

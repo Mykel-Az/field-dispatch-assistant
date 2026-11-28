@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from .models import (
     Job,
+    JobComplexity,
     JobStatus,
     JobStatusHistory,
     Organization,
@@ -289,6 +290,7 @@ class JobSerializer(serializers.ModelSerializer):
             "address",
             "postal_code",
             "category",
+            "complexity",
             "is_urgent",
             "priority",
             "status",
@@ -434,6 +436,7 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
             "customer_name",
             "customer_phone",
             "category",
+            "complexity",
             "is_urgent",
             "priority",
             "address",
@@ -457,7 +460,7 @@ class JobCreateSerializer(_JobInputMixin, serializers.ModelSerializer):
         start, end = attrs.get("slot_start"), attrs.get("slot_end")
         self._check_slot(start, end, is_urgent)
         skills = attrs.pop("acceptable_skills", None) or job_service.default_skills_for(
-            attrs["category"]
+            attrs["category"], attrs.get("complexity", JobComplexity.MAJOR)
         )
         if not skills:
             raise serializers.ValidationError(
@@ -502,6 +505,7 @@ class JobUpdateSerializer(_JobInputMixin, serializers.ModelSerializer):
             "customer_name",
             "customer_phone",
             "category",
+            "complexity",
             "is_urgent",
             "priority",
             "address",
@@ -771,3 +775,10 @@ class AvailableSlotSerializer(serializers.Serializer):
     technician = serializers.CharField()
     start = serializers.DateTimeField()
     end = serializers.DateTimeField()
+
+
+class JobCategoryInfoSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+    major_skill_ids = serializers.ListField(child=serializers.IntegerField())
+    minor_skill_ids = serializers.ListField(child=serializers.IntegerField())

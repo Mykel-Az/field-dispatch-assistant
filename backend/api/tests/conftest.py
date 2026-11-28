@@ -124,7 +124,9 @@ def make_job(organization, **overrides):
     skills = overrides.pop("skills", None)
     fields.update(overrides)
     job = Job.objects.create(organization=organization, **fields)
-    job.acceptable_skills.set(skills or Skill.objects.filter(name="HVAC"))
+    job.acceptable_skills.set(
+        skills or Skill.objects.filter(name="Heating & Air Conditioning")
+    )
     return job
 
 

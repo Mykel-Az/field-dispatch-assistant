@@ -13,10 +13,16 @@ document gives the whole picture and links to them.
 | [Deployment and cost](#deployment-and-cost) | Where it runs, what else could run it |
 | [Testing](#testing) | Levels, tools, what each protects, how to run |
 | [Sprint 1 test inventory](#sprint-1-test-inventory) | What the suite held when Sprint 1 closed |
+| [Benchmark](#benchmark-planner-vs-round-robin) | What the planner achieves against a naive baseline |
+| [Gaps and known limits](#gaps-and-known-limits) | What is deliberately not done |
+| [Dark mode](#dark-mode-adr-033) | The second theme |
 | [Responsive layout](#responsive-layout-s2-9) | How the UI adapts to a phone |
+| [AI tooling](#ai-tooling-used-in-development) | How AI was used building this, and what was verified |
 
-Status: Sprint 3 in progress. Sequencing (route order, ADR-028) is built; replanning is
-Sprint 3 and `replanning.py` is still empty, so nothing below describes it as done.
+Status: Sprint 3 built: sequencing (ADR-028), urgent force-assign (ADR-029), before/after
+metrics (ADR-030), replan on overrun (ADR-031), available slots (ADR-032) and dark mode
+(ADR-033). The AI features (suggestion-only wording and intake) are a stretch; the last
+section says plainly whether each was built.
 
 ## Architecture
 
@@ -123,6 +129,12 @@ dispatcher map draws one dashed line per technician and day in the order it runs
 The lines are straight, not roads. TIME: greedy per technician; gap choice does not
 look at total driving (full fidelity: solve order and gaps together).
 
+### Map: pins first, routes on request
+The map opens with pins only. A technician's route (a dashed line in stop order, from the
+office) is drawn when that technician is picked in the filters, and the day filter narrows
+it to one day. With nobody picked, a hint says how to see a route. Pure and tested in
+`routeLines.ts` (`selectedRouteLines`).
+
 ### Urgent force-assign (ADR-029)
 A dispatcher picks a technician for an urgent job. The server first answers a dry run:
 when the technician would arrive, and which jobs they have not started would have to go
@@ -137,8 +149,8 @@ the row locks are removed). TIME: greedy choice of what to bump.
 ### Before/after metrics (ADR-030)
 `GET /schedule/metrics/?date=` measures the day's placed jobs as planned and as a naive
 round-robin would have placed them (skill-aware, in request order), both timed from the
-start of the day with the engine's own rules. The plan page shows SLA breaches, minutes
-late, miles and workload spread side by side. Tests: hand-computed distances (82.8 vs
+start of the day with the engine's own rules. The plan page shows late arrivals, minutes
+late, driving and workload spread as paired bars with a verdict each (shorter is better). Tests: hand-computed distances (82.8 vs
 228 miles) in `test_metrics.py` and `test_schedule_metrics.py`; mutation checks (ignore
 travel, ignore breaches, ignore skills, reverse stop order) each fail tests. Honest
 result on the demo data: fewer breaches and less lateness on 3 of 4 days, not fewer miles.
@@ -162,6 +174,20 @@ start per technician per day, using the planner's filter rules and gap-fitting a
 UI yet. Tests: pure (`test_slots.py`) and API (`test_available_slots.py`: gaps that fit
 and do not, skills, daily limit, lookahead cap, tenant isolation, read-only); six
 mutations each fail a test.
+
+### Skills: preset trades and minor/major jobs (ADR-034)
+Fifteen preset skills (the three originals renamed in place), fifteen job categories with
+one specialist skill each, and a Minor/Major choice on every job. A major job accepts the
+specialist only; a minor one also accepts the category's helper skills (a handyman for a
+small electrical fix). The planner itself did not change: it matches a technician's skills
+against the job's acceptable skills. `GET /job-categories/` gives the form the skill ids for
+each case, so the form and the server cannot drift. Tests: the rule table, create and edit,
+the endpoint, and the planner end to end (a handyman gets a minor electrical job and not a
+major one; an electrician gets both); form tests for the defaults; mutations killed for
+"helpers always", "helpers never", "complexity ignored on create" and the form's two
+defaults ("always major", "complexity not sent"). One mutant (a redundant DISTINCT) was
+equivalent because the rules are unique per category and skill, and was removed instead.
+Not built: forms to create skills (they are global data; see the ADR).
 
 ### Job order and priority
 Planning runs in two passes (ADR-023). Pass 1 handles jobs urgent first, then
@@ -283,8 +309,8 @@ CI (`.github/workflows/ci.yml`) runs the same on every push and pull request,
 backend against Postgres 16.
 
 ### Current size (collected, Sprint 3, after metrics)
-Backend 853 tests (including 8 that need Postgres or saved Nominatim responses),
-frontend 207. Per-file counts: `pytest --collect-only -q`.
+Backend 868 tests (including 8 that need Postgres or saved Nominatim responses),
+frontend 219. Per-file counts: `pytest --collect-only -q`.
 
 ### Quality bar (as followed in Sprint 2)
 - Every change ships with tests; a bug fix starts with a test that fails.
@@ -326,11 +352,43 @@ engine (164 tests, none at Sprint 1 close), planning service and API, technician
 endpoints, priority, any-time jobs, time zone rules, and the plan, technician and
 layout screens.
 
+## Benchmark: planner vs round-robin
+
+Method (ADR-030): the same placed jobs for a day, timed from the start of the day, once
+with the technicians and order the planner produced and once dealt out round-robin
+(skill-aware, in request order, ignoring distance, load and deadlines). The numbers
+below are from the seed data (`seed_demo --bulk 30`), planned for four consecutive days
+on 2026-11-27, 8 placed jobs per day, and shown on the plan page.
+
+| Day | SLA breaches (planner / round-robin) | Minutes late | Miles driven | Workload spread |
+|---|---|---|---|---|
+| 1 | 1 / 1 | 208 / 90 | 54.2 / 58.0 | 0 / 0 |
+| 2 | 1 / 3 | 32 / 292 | 52.3 / 46.4 | 0 / 0 |
+| 3 | 0 / 4 | 0 / 243 | 64.1 / 52.1 | 0 / 2 |
+| 4 | 0 / 2 | 0 / 138 | 37.8 / 31.1 | 0 / 2 |
+
+Reading it honestly: across the four days the planner has 2 SLA breaches to round-robin's
+10, and 240 minutes late to 763; it keeps the load even. It does **not** drive fewer miles
+on three of the four days, because it spends distance to meet windows. On day 1 the
+baseline was less late (90 against 208 minutes); the cause was not investigated, so no
+explanation is claimed. This is one seeded data set, not a statistical sample, and both
+sides use straight-line distances.
+
 ## Gaps and known limits
-- The planner is greedy (gaps, ADR-027; sequencing, ADR-028). Replanning on disruption
-  and `available_slots` are Sprint 3.
+- The planner is greedy (gaps, ADR-027; sequencing, ADR-028; bump choice, ADR-029), not an
+  optimiser. It optimises deadlines, skills and even load, not total miles (see the
+  benchmark).
+- Replanning is narrow on purpose (ADR-031): a job that runs over restates later arrival
+  times but never reorders or reassigns; a technician who drops out returns their jobs
+  to the queue and nothing moves automatically. The fields that change a plan (time,
+  address, urgency) are locked once a job is assigned, so editing one needs the job
+  returned to the queue first; replanning on edit is out of scope. There is no banner
+  naming the released jobs.
+- `available-slots` (ADR-032) is an endpoint with no screen, and offers the technician's
+  earliest start, not a held appointment.
 - Frontend tests use jsdom, so layout, focus rings and real touch are checked by
   hand, not by CI.
+- Map lines are straight, and the map keeps light tiles in dark mode.
 - The time zone rule has a small race window (ADR-024).
 - Real Nominatim responses are saved by a script run by hand; CI never calls it.
 
@@ -377,4 +435,27 @@ Manual check, 360 / 768 / 1280px, every page, signed in as head dispatcher
 
 ## AI tooling used in development
 
-Added after the AI features are built (Sprint 3 stretch): what each tool is used for and how its output is verified.
+**Claude (Anthropic) was used as a development assistant** for this project: drafting
+and reviewing code, tests, ADRs and documentation, and brainstorming alternatives. It
+is a tool in the workflow, not an author of record: every change is committed by the
+student after running the checks below.
+
+How its output was verified:
+- The quality bar above: lint, format, import-contract, migration and schema checks,
+  and the full backend and frontend test suites, on every change.
+- New tests were proved meaningful by mutation: break the code, watch a test fail. Where
+  a mutant survived, either a test was added or the mutant was shown to be equivalent
+  and noted.
+- Numbers in tests are computed by hand (distances, arrival times), not copied from the
+  code's own output.
+- The browser was used for layout at phone and desktop width, in both themes.
+- Claims in the docs were checked against the code; where a claim could not be
+  checked (for example, why one benchmark day favours the baseline), the doc says so.
+- Customer data is not sent to any AI tool, and the engine takes no names, phones or
+  addresses (ADR-019).
+
+**AI features inside the product:** not built. The planned ones (AI-worded explanations
+that restate the engine's structured reasons, and free-text intake) would sit outside the
+decision path: the engine alone decides, and the structured explanation stays the
+source of truth. They are listed as stretch work, so nothing in this document or the
+ADRs depends on them.

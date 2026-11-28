@@ -160,6 +160,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/Health'
           description: ''
+  /api/job-categories/:
+    get:
+      operationId: job_categories_list
+      description: Each category, with the skills that may do a major job and a minor
+        one (ADR-034).
+      tags:
+      - job-categories
+      security:
+      - sessionAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobCategoryInfo'
+          description: ''
   /api/jobs/:
     get:
       operationId: jobs_list
@@ -1126,11 +1144,35 @@ components:
       - hvac
       - electrical
       - appliance
+      - handyman
+      - plumbing
+      - roofing
+      - locksmith
+      - painting
+      - landscaping
+      - gardening
+      - florist
+      - tree_service
+      - cleaning
+      - furniture
+      - movers
       type: string
       description: |-
-        * `hvac` - HVAC
-        * `electrical` - Electrical
-        * `appliance` - Appliance repair
+        * `hvac` - Heating & Air Conditioning
+        * `electrical` - Electricians
+        * `appliance` - Appliances and Repair
+        * `handyman` - Contractors & Handymen
+        * `plumbing` - Plumbers
+        * `roofing` - Roofing
+        * `locksmith` - Locksmiths
+        * `painting` - Painters
+        * `landscaping` - Landscaping
+        * `gardening` - Nurseries & Gardening
+        * `florist` - Florists
+        * `tree_service` - Tree Services
+        * `cleaning` - Home Cleaning
+        * `furniture` - Furniture Stores
+        * `movers` - Movers
     ChangePassword:
       type: object
       properties:
@@ -1143,6 +1185,14 @@ components:
       required:
       - current_password
       - new_password
+    ComplexityEnum:
+      enum:
+      - minor
+      - major
+      type: string
+      description: |-
+        * `minor` - Minor
+        * `major` - Major
     DayMetrics:
       type: object
       properties:
@@ -1264,6 +1314,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/CategoryEnum'
           readOnly: true
+        complexity:
+          allOf:
+          - $ref: '#/components/schemas/ComplexityEnum'
+          readOnly: true
         is_urgent:
           type: boolean
           readOnly: true
@@ -1309,6 +1363,7 @@ components:
       required:
       - address
       - category
+      - complexity
       - customer_name
       - geocode_status
       - id
@@ -1357,6 +1412,26 @@ components:
           maxLength: 500
       required:
       - reason
+    JobCategoryInfo:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        major_skill_ids:
+          type: array
+          items:
+            type: integer
+        minor_skill_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - label
+      - major_skill_ids
+      - minor_skill_ids
+      - value
     JobCreate:
       type: object
       description: POST /jobs/. No organization, status, technician, version or lat/lng.
@@ -1379,6 +1454,8 @@ components:
             maxLength: 0
         category:
           $ref: '#/components/schemas/CategoryEnum'
+        complexity:
+          $ref: '#/components/schemas/ComplexityEnum'
         is_urgent:
           type: boolean
         priority:
@@ -1439,6 +1516,10 @@ components:
         category:
           allOf:
           - $ref: '#/components/schemas/CategoryEnum'
+          readOnly: true
+        complexity:
+          allOf:
+          - $ref: '#/components/schemas/ComplexityEnum'
           readOnly: true
         is_urgent:
           type: boolean
@@ -1523,6 +1604,7 @@ components:
       - acceptable_skills
       - address
       - category
+      - complexity
       - created_at
       - customer_name
       - customer_phone
@@ -1923,6 +2005,8 @@ components:
             maxLength: 0
         category:
           $ref: '#/components/schemas/CategoryEnum'
+        complexity:
+          $ref: '#/components/schemas/ComplexityEnum'
         is_urgent:
           type: boolean
         priority:

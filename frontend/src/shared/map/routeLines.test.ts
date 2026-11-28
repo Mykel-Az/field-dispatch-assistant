@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MapPin } from '../api/client';
 import type { Technician } from '../api/models';
 import { TECH_COLORS } from '../../dispatcher/plan/planMapModel';
-import { buildRouteLines } from './routeLines';
+import { buildRouteLines, selectedRouteLines } from './routeLines';
 
 const tech = (id: number) => ({ id }) as unknown as Technician;
 const pin = (id: number, over: Partial<MapPin> = {}): MapPin =>
@@ -50,5 +50,35 @@ describe('buildRouteLines', () => {
 
   it('ignores a pin with no stop number', () => {
     expect(buildRouteLines([pin(1, { sequence_position: null }), pin(2)], [tech(1)], OFFICE)).toEqual([]);
+  });
+});
+
+describe('selectedRouteLines', () => {
+  const pins = [
+    pin(1),
+    pin(2),
+    pin(3, { technician_id: 2 }),
+    pin(4, { technician_id: 2 }),
+  ];
+  const techs = [tech(1), tech(2)];
+
+  it('draws nothing when no technician is picked: the map is just pins', () => {
+    expect(selectedRouteLines([], pins, techs, OFFICE)).toEqual([]);
+  });
+
+  it('draws only the picked technician’s route', () => {
+    const lines = selectedRouteLines(['2'], pins, techs, OFFICE);
+    expect(lines.map((l) => l.technicianId)).toEqual([2]);
+  });
+
+  it('draws one line per picked technician', () => {
+    const lines = selectedRouteLines(['1', '2'], pins, techs, OFFICE);
+    expect(lines.map((l) => l.technicianId)).toEqual([1, 2]);
+  });
+
+  it('keeps a technician’s days apart (the day filter narrows the pins to one)', () => {
+    const twoDays = [pin(1), pin(2), pin(3, { scheduled_date: '2026-11-26' }), pin(4, { scheduled_date: '2026-11-26' })];
+    expect(selectedRouteLines(['1'], twoDays, techs, OFFICE)).toHaveLength(2);
+    expect(selectedRouteLines(['1'], twoDays.slice(0, 2), techs, OFFICE)).toHaveLength(1);
   });
 });

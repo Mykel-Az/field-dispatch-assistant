@@ -24,10 +24,16 @@ in plain English, and re-plans when the day changes. Built as the MSSE
 ## What it does
 
 The engine runs four stages: **filter** (skills, hours, capacity) →
-**score** (SLA risk, distance, workload) → **assign + sequence** (nearest
-neighbour over real coordinates) → **replan** (technician unavailable, urgent
-job, overrun). Each assignment comes with an explanation. A dispatcher map
-shows job status and each technician's planned route.
+**score** (SLA risk, distance, workload) → **assign + sequence** (greedy,
+nearest-next, fitted around jobs a technician already has) → **replan**.
+Replanning is deliberately narrow: an urgent job can be force-assigned with a
+preview of what it bumps, a job that runs over restates the arrival times of the
+technician's later stops (never their order or owner), and a technician who drops
+out returns their jobs to the queue to be planned again. Each assignment comes
+with an explanation. A dispatcher map shows job status and each technician's
+route (straight lines, not roads), the plan page compares the planner with a
+round-robin baseline, `available-slots` answers "when could someone come?", and
+there is a dark mode. Distances are straight-line over real coordinates.
 
 Out of scope, by design: live GPS, live routing APIs, multi-day optimisation,
 true optimal solving. See the ADRs for why.

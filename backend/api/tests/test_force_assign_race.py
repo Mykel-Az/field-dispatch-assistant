@@ -27,7 +27,7 @@ def test_two_force_assigns_at_once_never_reuse_a_stop_or_bump_a_job_twice(
     org_a.geocode_status = "manual"
     org_a.work_start, org_a.work_end = datetime.time(8), datetime.time(17)
     org_a.save()
-    hvac, _ = Skill.objects.get_or_create(name="HVAC")
+    hvac, _ = Skill.objects.get_or_create(name="Heating & Air Conditioning")
     tech = technician_of(technician_a)
     tech.skills.add(hvac)
     low = make_job(

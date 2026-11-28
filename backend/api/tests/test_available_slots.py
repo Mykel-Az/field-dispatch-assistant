@@ -38,7 +38,7 @@ def org(org_a):
 @pytest.fixture
 def tech(org, technician_a):
     technician = technician_of(technician_a)
-    technician.skills.add(Skill.objects.get(name="HVAC"))
+    technician.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     return technician
 
 
@@ -107,7 +107,7 @@ def test_a_gap_big_enough_is_offered_and_one_too_small_is_not(org, tech, dispatc
 
 
 def test_a_technician_without_the_skill_is_never_offered(org, tech, dispatcher_a):
-    electrical = Skill.objects.exclude(name="HVAC").first()
+    electrical = Skill.objects.exclude(name="Heating & Air Conditioning").first()
     job = wanted(org, skills=[electrical])
     assert slots(dispatcher_a, job) == []
 
@@ -184,13 +184,13 @@ def test_other_organizations_technicians_are_not_offered(
     org, tech, dispatcher_a, org_b
 ):
     outsider = technician_of(make_user(org_b, Role.TECHNICIAN, "out@example.com"))
-    outsider.skills.add(Skill.objects.get(name="HVAC"))
+    outsider.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     assert {s["technician_id"] for s in slots(dispatcher_a, wanted(org))} == {tech.pk}
 
 
 def test_two_technicians_are_listed_soonest_first(org, tech, dispatcher_a):
     colleague = technician_of(make_user(org, Role.TECHNICIAN, "second@example.com"))
-    colleague.skills.add(Skill.objects.get(name="HVAC"))
+    colleague.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     held(org, tech, 9, 10)  # the first technician is busy until 10
     result = slots(dispatcher_a, wanted(org))
     assert [s["technician_id"] for s in result] == [colleague.pk, tech.pk]

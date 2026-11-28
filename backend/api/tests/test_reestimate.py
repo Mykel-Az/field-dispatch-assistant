@@ -31,7 +31,7 @@ def org(org_a):
 @pytest.fixture
 def tech(org, technician_a):
     technician = technician_of(technician_a)
-    technician.skills.add(Skill.objects.get(name="HVAC"))
+    technician.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     return technician
 
 

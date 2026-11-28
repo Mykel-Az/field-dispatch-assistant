@@ -105,26 +105,47 @@ export type JobUpdateInput = components['schemas']['PatchedJobUpdate'] & { versi
 export type JobCategory = components['schemas']['CategoryEnum'];
 export type GeocodeStatus = components['schemas']['GeocodeStatusEnum'];
 
+export type JobComplexity = components['schemas']['ComplexityEnum'];
+export type JobCategoryInfo = components['schemas']['JobCategoryInfo'];
+
+// Same wording as the server's JobCategory labels; the order is the order on the form.
 export const CATEGORY_LABEL: Record<JobCategory, string> = {
-  hvac: 'HVAC',
-  electrical: 'Electrical',
-  appliance: 'Appliance repair',
+  hvac: 'Heating & Air Conditioning',
+  electrical: 'Electricians',
+  plumbing: 'Plumbers',
+  appliance: 'Appliances and Repair',
+  handyman: 'Contractors & Handymen',
+  roofing: 'Roofing',
+  locksmith: 'Locksmiths',
+  painting: 'Painters',
+  landscaping: 'Landscaping',
+  gardening: 'Nurseries & Gardening',
+  tree_service: 'Tree Services',
+  cleaning: 'Home Cleaning',
+  florist: 'Florists',
+  furniture: 'Furniture Stores',
+  movers: 'Movers',
 };
 
-// TIME: category -> default skill NAME, mirroring the CandidateSkillRule seed.
-// Full-fidelity path: the API returns each category's default skill ids, so the
-// form can never drift from the table.
-export const CATEGORY_DEFAULT_SKILL: Record<JobCategory, string> = {
-  hvac: 'HVAC',
-  electrical: 'Electrical',
-  appliance: 'Appliance Repair',
-};
+export const COMPLEXITY_LABEL: Record<JobComplexity, string> = { minor: 'Minor', major: 'Major' };
 
 // TIME: starting estimate per category until the algorithm learns real durations.
 export const CATEGORY_DEFAULT_MINUTES: Record<JobCategory, number> = {
   hvac: 120,
   electrical: 90,
+  plumbing: 90,
   appliance: 60,
+  handyman: 60,
+  roofing: 240,
+  locksmith: 45,
+  painting: 240,
+  landscaping: 180,
+  gardening: 120,
+  tree_service: 180,
+  cleaning: 120,
+  florist: 60,
+  furniture: 90,
+  movers: 240,
 };
 
 // US only for now. Keep in step with api.models.US_TIMEZONES.

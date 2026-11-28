@@ -49,10 +49,10 @@ def test_saving_without_a_change_adds_nothing(dispatcher_a, org_a):
 
 def test_a_skill_change_lists_skill_names(dispatcher_a, org_a):
     job = make_job(org_a)
-    electrical = Skill.objects.get(name="Electrical")
+    electrical = Skill.objects.get(name="Electricians")
     patch(dispatcher_a, job, {"skill_ids": [electrical.pk]})
     (row,) = edits(job)
-    assert row.changes == {"skills": [["HVAC"], ["Electrical"]]}
+    assert row.changes == {"skills": [["Heating & Air Conditioning"], ["Electricians"]]}
 
 
 def test_changing_the_address_records_the_new_location(dispatcher_a, org_a):

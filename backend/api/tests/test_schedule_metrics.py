@@ -30,14 +30,14 @@ def org(org_a):
 @pytest.fixture
 def north_tech(org):
     tech = technician_of(make_user(org, Role.TECHNICIAN, "n@x.example"))
-    tech.skills.add(Skill.objects.get(name="HVAC"))
+    tech.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     return tech
 
 
 @pytest.fixture
 def south_tech(org):
     tech = technician_of(make_user(org, Role.TECHNICIAN, "s@x.example"))
-    tech.skills.add(Skill.objects.get(name="HVAC"))
+    tech.skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     return tech
 
 
@@ -84,7 +84,7 @@ def test_the_plan_drives_less_than_the_baseline_on_the_same_jobs(
 def test_a_job_only_the_other_skill_can_do_is_unplaced_in_the_baseline(
     org, dispatcher_a, north_tech
 ):
-    plumbing = Skill.objects.exclude(name="HVAC").first()
+    plumbing = Skill.objects.exclude(name="Heating & Air Conditioning").first()
     placed(org, north_tech, 1, 30.1, skills=[plumbing])
     body = client_for(dispatcher_a).get(URL).json()
     assert body["plan"]["jobs"] == 1  # a person put it there

@@ -13,6 +13,7 @@ from ..exceptions import Conflict
 from ..models import (
     GeocodeStatus,
     Job,
+    JobComplexity,
     JobStatus,
     JobStatusHistory,
     Skill,
@@ -69,10 +70,16 @@ PLAN_FIELDS = (
 )
 
 
-def default_skills_for(category):
-    """Skills a job of this category may be done by (CandidateSkillRule)."""
+def default_skills_for(category, complexity=JobComplexity.MAJOR):
+    """Skills a job of this category and complexity may be done by (CandidateSkillRule).
+
+    A major job needs the category's specialist; a minor one also accepts its helpers.
+    """
+    allowed = [False] + ([True] if complexity == JobComplexity.MINOR else [])
     return list(
-        Skill.objects.filter(category_rules__category=category).order_by("name")
+        Skill.objects.filter(
+            category_rules__category=category, category_rules__minor_only__in=allowed
+        ).order_by("name")
     )
 
 

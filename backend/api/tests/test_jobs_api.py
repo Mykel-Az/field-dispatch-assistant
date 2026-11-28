@@ -28,13 +28,14 @@ def skill(name):
 
 
 # ---- seed -------------------------------------------------------------------
-def test_category_rules_are_seeded(db):
-    pairs = set(CandidateSkillRule.objects.values_list("category", "skill__name"))
-    assert pairs == {
-        ("hvac", "HVAC"),
-        ("electrical", "Electrical"),
-        ("appliance", "Appliance Repair"),
-    }
+def test_every_category_has_exactly_one_specialist_named_like_the_trade(db):
+    from api.models import JobCategory
+
+    for category in JobCategory:
+        specialists = CandidateSkillRule.objects.filter(
+            category=category, minor_only=False
+        )
+        assert [r.skill.name for r in specialists] == [category.label]
 
 
 # ---- create -----------------------------------------------------------------
@@ -42,7 +43,9 @@ def test_create_uses_category_default_skills_and_writes_history(dispatcher_a):
     response = client_for(dispatcher_a).post("/api/jobs/", body(), format="json")
     assert response.status_code == 201, response.content
     data = response.json()
-    assert [s["name"] for s in data["acceptable_skills"]] == ["HVAC"]
+    assert [s["name"] for s in data["acceptable_skills"]] == [
+        "Heating & Air Conditioning"
+    ]
     assert data["status"] == "unassigned" and data["version"] == 1
     assert data["scheduled_date"] == "2026-11-02"
     assert data["geocode_status"] == "ok" and data["location_label"]
@@ -64,19 +67,21 @@ def test_create_goes_into_the_requesters_organization(dispatcher_a, org_a, org_b
 
 
 def test_dispatcher_may_override_skills(dispatcher_a):
-    ids = [skill("Electrical").pk, skill("HVAC").pk]
+    ids = [skill("Electricians").pk, skill("Heating & Air Conditioning").pk]
     response = client_for(dispatcher_a).post(
         "/api/jobs/", body(skill_ids=ids), format="json"
     )
     names = {s["name"] for s in response.json()["acceptable_skills"]}
-    assert names == {"Electrical", "HVAC"}
+    assert names == {"Electricians", "Heating & Air Conditioning"}
 
 
 def test_an_empty_skill_list_falls_back_to_the_category_defaults(dispatcher_a):
     response = client_for(dispatcher_a).post(
         "/api/jobs/", body(skill_ids=[]), format="json"
     )
-    assert [s["name"] for s in response.json()["acceptable_skills"]] == ["HVAC"]
+    assert [s["name"] for s in response.json()["acceptable_skills"]] == [
+        "Heating & Air Conditioning"
+    ]
 
 
 def test_no_skills_at_all_is_a_400(dispatcher_a):
@@ -168,7 +173,7 @@ def test_list_shape_and_isolation(dispatcher_a, org_a, org_b):
     [row] = response.json()["results"]
     assert row["id"] == mine.pk
     assert set(row) == {
-        "id", "title", "customer_name", "address", "postal_code", "category",
+        "id", "title", "customer_name", "address", "postal_code", "category", "complexity",
         "is_urgent", "priority", "status", "technician", "scheduled_date",
         "slot_start", "slot_end", "slot_is_fixed", "geocode_status", "location_label",
     }  # fmt: skip
@@ -240,7 +245,9 @@ def test_detail_has_history_and_skills(dispatcher_a, org_a):
     )
     data = client_for(dispatcher_a).get(f"/api/jobs/{job.pk}/").json()
     assert data["customer_phone"] == "555-123-4567" and data["version"] == 1
-    assert [s["name"] for s in data["acceptable_skills"]] == ["HVAC"]
+    assert [s["name"] for s in data["acceptable_skills"]] == [
+        "Heating & Air Conditioning"
+    ]
     assert len(data["history"]) == 1
 
 
@@ -363,7 +370,7 @@ def test_skills_are_locked_once_assigned(dispatcher_a, org_a, technician_a):
     tech = technician_of(technician_a)
     job = make_job(org_a, status="assigned", technician=tech, sequence_position=1)
     response = patch(
-        dispatcher_a, job, {"version": 1, "skill_ids": [skill("Electrical").pk]}
+        dispatcher_a, job, {"version": 1, "skill_ids": [skill("Electricians").pk]}
     )
     assert response.status_code == 409
 

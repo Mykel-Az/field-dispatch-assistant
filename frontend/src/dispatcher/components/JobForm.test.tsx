@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   pinJob: vi.fn(),
   lookupAddress: vi.fn(),
   fetchSkills: vi.fn(),
+  fetchJobCategories: vi.fn(),
   fetchOrganization: vi.fn(),
 }));
 vi.mock('../../shared/api/client', () => api);
@@ -20,7 +21,15 @@ vi.mock('../../shared/api/client', () => api);
 vi.mock('../../shared/map/PinMap', () => ({ default: () => null }));
 
 const org = { work_start: '07:00:00', work_end: '18:00:00', lat: 30.2, lng: -97.7 };
-const skills = [{ id: 1, name: 'HVAC', description: null }];
+const skills = [
+  { id: 1, name: 'HVAC', description: null },
+  { id: 2, name: 'Electricians', description: null },
+  { id: 3, name: 'Contractors & Handymen', description: null },
+];
+const categories = [
+  { value: 'hvac', label: 'Heating & Air Conditioning', major_skill_ids: [1], minor_skill_ids: [1, 3] },
+  { value: 'electrical', label: 'Electricians', major_skill_ids: [2], minor_skill_ids: [2, 3] },
+];
 
 let root: Root;
 let host: HTMLElement;
@@ -30,6 +39,7 @@ beforeEach(() => {
   api.pinJob.mockReset();
   api.lookupAddress.mockReset().mockResolvedValue({ status: 'ok', lat: 30.2, lng: -97.7, label: '1 Main St' });
   api.fetchSkills.mockReset().mockResolvedValue(skills);
+  api.fetchJobCategories.mockReset().mockResolvedValue(categories);
   api.fetchOrganization.mockReset().mockResolvedValue(org);
   host = document.createElement('div');
   document.body.append(host);
@@ -148,5 +158,55 @@ describe('JobForm priority and any-time', () => {
     expect(sent.priority).toBe('high');
     expect(sent).not.toHaveProperty('slot_start');
     expect(sent).not.toHaveProperty('any_time_on');
+  });
+});
+
+const skillBox = (name: string) => {
+  const l = [...host.querySelectorAll('fieldset label')].find((x) => x.textContent?.trim() === name);
+  expect(l, name).toBeTruthy();
+  return l!.querySelector('input') as HTMLInputElement;
+};
+
+describe('JobForm minor and major jobs', () => {
+  it('is a major job by default and sends that', async () => {
+    await fillNewJob();
+    await submit();
+    expect(api.createJob.mock.calls[0][0].complexity).toBe('major');
+  });
+
+  it('sends minor when the dispatcher says so', async () => {
+    await fillNewJob();
+    await press(radio('How big is the job', 'Minor'));
+    await submit();
+    expect(api.createJob.mock.calls[0][0].complexity).toBe('minor');
+  });
+
+  it('pre-selects the specialist for a major job and adds the helpers for a minor one', async () => {
+    await mount();
+    await press(radio('Type of work', 'Electricians'));
+    expect(skillBox('Electricians').checked).toBe(true);
+    expect(skillBox('Contractors & Handymen').checked).toBe(false);
+    await press(radio('How big is the job', 'Minor'));
+    expect(skillBox('Electricians').checked).toBe(true);
+    expect(skillBox('Contractors & Handymen').checked).toBe(true);
+    await press(radio('How big is the job', 'Major'));
+    expect(skillBox('Contractors & Handymen').checked).toBe(false);
+  });
+
+  it('leaves skills to the server until the chips are touched, so the server applies the same rule', async () => {
+    await fillNewJob();
+    await press(radio('How big is the job', 'Minor'));
+    await submit();
+    expect(api.createJob.mock.calls[0][0]).not.toHaveProperty('skill_ids');
+  });
+
+  it('keeps the dispatcher’s own skill choice when the job size changes', async () => {
+    await mount();
+    await press(radio('Type of work', 'Electricians'));
+    await press(skillBox('Contractors & Handymen'));
+    await press(radio('How big is the job', 'Minor'));
+    expect(skillBox('Contractors & Handymen').checked).toBe(true);
+    await press(radio('How big is the job', 'Major'));
+    expect(skillBox('Contractors & Handymen').checked).toBe(true); // touched: it stays
   });
 });

@@ -11,6 +11,7 @@ import type {
   Page,
   RegisterInput,
   DayMetrics,
+  JobCategoryInfo,
   ScheduleResult,
   User,
   Technician,
@@ -23,6 +24,8 @@ export type Health = components['schemas']['Health'];
 
 export const checkHealth = () => get<Health>('/health/');
 export const fetchSkills = () => get<Skill[]>('/skills/');
+/** Each category with the skills that may do a major job and a minor one (ADR-034). */
+export const fetchJobCategories = () => get<JobCategoryInfo[]>('/job-categories/');
 
 // --- auth ---
 export const fetchMe = () => get<User>('/auth/me/', { skipUnauthorizedHandler: true });

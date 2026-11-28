@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.db import transaction
@@ -19,8 +20,10 @@ from .adapters import OrganizationNotConfigured
 from .exceptions import Conflict
 from .mixins import TenantScopedViewMixin
 from .models import (
+    CandidateSkillRule,
     GeocodeStatus,
     Job,
+    JobCategory,
     JobStatus,
     JobStatusHistory,
     Organization,
@@ -44,6 +47,7 @@ from .serializers import (
     HealthSerializer,
     JobAssignSerializer,
     JobCancelSerializer,
+    JobCategoryInfoSerializer,
     JobCreateSerializer,
     JobDetailSerializer,
     JobFilterSerializer,
@@ -379,6 +383,32 @@ class SkillViewSet(generics.ListAPIView):
     serializer_class = SkillSerializer
     permission_classes = [IsDispatcher]
     pagination_class = None  # Disable pagination for this view
+
+
+class JobCategoriesView(APIView):
+    """Each category, with the skills that may do a major job and a minor one (ADR-034)."""
+
+    permission_classes = [IsDispatcher]
+
+    @extend_schema(responses=JobCategoryInfoSerializer(many=True))
+    def get(self, request):
+        rules = CandidateSkillRule.objects.values_list(
+            "category", "skill_id", "minor_only"
+        )
+        major, minor = defaultdict(list), defaultdict(list)
+        for category, skill_id, minor_only in sorted(rules):
+            (minor if minor_only else major)[category].append(skill_id)
+        data = [
+            {
+                "value": c.value,
+                "label": c.label,
+                "major_skill_ids": major[c.value],
+                # a minor job accepts the specialist too
+                "minor_skill_ids": major[c.value] + minor[c.value],
+            }
+            for c in JobCategory
+        ]
+        return Response(JobCategoryInfoSerializer(data, many=True).data)
 
 
 DETAIL_ACTIONS = {"retrieve", "create", "partial_update", "cancel"}

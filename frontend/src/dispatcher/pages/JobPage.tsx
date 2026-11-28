@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { cancelJob, fetchJob } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/http';
-import { CATEGORY_LABEL, type JobDetail } from '../../shared/api/models';
+import { CATEGORY_LABEL, COMPLEXITY_LABEL, type JobDetail } from '../../shared/api/models';
 import StatusBadge from '../../shared/components/StatusBadge';
 import JobTags from '../../shared/components/JobTags';
 import { historyActor } from '../../shared/historyActor';
@@ -198,7 +198,7 @@ export default function JobPage() {
                     {job.customer_name}
                     {job.customer_phone && <div className="text-sm text-ink-muted">{job.customer_phone}</div>}
                   </Fact>
-                  <Fact label="Category">{CATEGORY_LABEL[job.category]}</Fact>
+                  <Fact label="Category">{CATEGORY_LABEL[job.category]} · {COMPLEXITY_LABEL[job.complexity]}</Fact>
                   <Fact label="Address">
                     {job.address}
                     <div className="text-sm text-ink-muted">{placeLine(job)}</div>

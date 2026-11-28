@@ -9,7 +9,23 @@ from api.models import Skill
 @pytest.mark.django_db
 def test_seed_skills_present():
     names = set(Skill.objects.values_list("name", flat=True))
-    assert {"HVAC", "Electrical", "Appliance Repair"} <= names
+    assert names == {
+        "Contractors & Handymen",
+        "Plumbers",
+        "Electricians",
+        "Heating & Air Conditioning",
+        "Appliances and Repair",
+        "Roofing",
+        "Locksmiths",
+        "Painters",
+        "Landscaping",
+        "Nurseries & Gardening",
+        "Florists",
+        "Tree Services",
+        "Home Cleaning",
+        "Furniture Stores",
+        "Movers",
+    }
 
 
 def test_health_check():

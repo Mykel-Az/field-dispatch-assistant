@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import {
   createJob,
   fetchOrganization,
+  fetchJobCategories,
   fetchSkills,
   lookupAddress,
   pinJob,
@@ -12,9 +13,11 @@ import {
 import { ApiError } from '../../shared/api/http';
 import {
   CATEGORY_DEFAULT_MINUTES,
-  CATEGORY_DEFAULT_SKILL,
+  COMPLEXITY_LABEL,
   CATEGORY_LABEL,
   type JobCategory,
+  type JobCategoryInfo,
+  type JobComplexity,
   type JobCreateInput,
   type JobDetail,
   type JobPriority,
@@ -66,6 +69,8 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   const end = job?.slot_end ? splitLocal(job.slot_end) : null;
 
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [categoryInfo, setCategoryInfo] = useState<JobCategoryInfo[]>([]);
+  const [complexity, setComplexity] = useState<JobComplexity>(job?.complexity ?? 'major');
   const [office, setOffice] = useState<LatLng | null>(null);
   const [titleText, setTitleText] = useState(job?.title ?? '');
   const [customerName, setCustomerName] = useState(job?.customer_name ?? '');
@@ -102,6 +107,9 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
     fetchSkills()
       .then(setSkills)
       .catch(() => setSkills([]));
+    fetchJobCategories()
+      .then(setCategoryInfo)
+      .catch(() => setCategoryInfo([])); // the chips then start empty: pick them by hand
     fetchOrganization()
       .then((o) => {
         setHours({ from: hhmm(o.work_start, '08:00'), to: hhmm(o.work_end, '17:00') });
@@ -142,9 +150,10 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
   const minutes =
     duration !== '' ? duration : String(CATEGORY_DEFAULT_MINUTES[category]);
 
-  const categoryDefaults = skills
-    .filter((s) => s.name === CATEGORY_DEFAULT_SKILL[category])
-    .map((s) => s.id);
+  // Until the chips are touched, the skills follow the category and whether the job is minor
+  // (the specialist and its helpers) or major (the specialist only): the server's rule table.
+  const info = categoryInfo.find((c) => c.value === category);
+  const categoryDefaults = (complexity === 'minor' ? info?.minor_skill_ids : info?.major_skill_ids) ?? [];
   const skillIds = skillsTouched ? pickedSkills : categoryDefaults;
 
   function toggleSkill(id: number, on: boolean) {
@@ -195,6 +204,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           customer_name: customerName,
           customer_phone: phone,
           category,
+          complexity,
           priority, // not a plan field: it can change on a planned job
           ...(locked
             ? {}
@@ -214,6 +224,7 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           customer_name: customerName,
           customer_phone: phone,
           category,
+          complexity,
           is_urgent: urgent,
           priority,
           address,
@@ -315,6 +326,29 @@ export default function JobForm({ job, onSaved, onCancel, onReload }: Props) {
           ))}
         </div>
         {fieldError('category')}
+        <div role="radiogroup" aria-label="How big is the job" className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-ink-muted">How big is the job?</span>
+          {(['minor', 'major'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={complexity === c}
+              onClick={() => setComplexity(c)}
+              className={`min-h-11 rounded-full border-[1.5px] px-4 text-sm font-semibold ${
+                complexity === c
+                  ? 'border-brand bg-brand-soft text-brand-ink'
+                  : 'border-line-strong bg-surface hover:bg-canvas'
+              }`}
+            >
+              {COMPLEXITY_LABEL[c]}
+            </button>
+          ))}
+        </div>
+        <p className={ui.muted}>
+          A minor job can also go to the helper trades (a handyman for a small electrical fix, say);
+          a major one needs the specialist.
+        </p>
         <label className={ui.label}>
           Problem, as the customer describes it
           <textarea

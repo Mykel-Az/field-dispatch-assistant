@@ -138,6 +138,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/job-categories/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Each category, with the skills that may do a major job and a minor one (ADR-034). */
+        get: operations["job_categories_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/": {
         parameters: {
             query?: never;
@@ -656,16 +673,34 @@ export interface components {
             end: string;
         };
         /**
-         * @description * `hvac` - HVAC
-         *     * `electrical` - Electrical
-         *     * `appliance` - Appliance repair
+         * @description * `hvac` - Heating & Air Conditioning
+         *     * `electrical` - Electricians
+         *     * `appliance` - Appliances and Repair
+         *     * `handyman` - Contractors & Handymen
+         *     * `plumbing` - Plumbers
+         *     * `roofing` - Roofing
+         *     * `locksmith` - Locksmiths
+         *     * `painting` - Painters
+         *     * `landscaping` - Landscaping
+         *     * `gardening` - Nurseries & Gardening
+         *     * `florist` - Florists
+         *     * `tree_service` - Tree Services
+         *     * `cleaning` - Home Cleaning
+         *     * `furniture` - Furniture Stores
+         *     * `movers` - Movers
          * @enum {string}
          */
-        CategoryEnum: "hvac" | "electrical" | "appliance";
+        CategoryEnum: "hvac" | "electrical" | "appliance" | "handyman" | "plumbing" | "roofing" | "locksmith" | "painting" | "landscaping" | "gardening" | "florist" | "tree_service" | "cleaning" | "furniture" | "movers";
         ChangePassword: {
             current_password: string;
             new_password: string;
         };
+        /**
+         * @description * `minor` - Minor
+         *     * `major` - Major
+         * @enum {string}
+         */
+        ComplexityEnum: "minor" | "major";
         DayMetrics: {
             /** Format: date */
             plan_date: string;
@@ -718,6 +753,7 @@ export interface components {
             readonly address: string;
             readonly postal_code: string;
             readonly category: components["schemas"]["CategoryEnum"];
+            readonly complexity: components["schemas"]["ComplexityEnum"];
             readonly is_urgent: boolean;
             readonly priority: components["schemas"]["PriorityEnum"];
             /** @default unassigned */
@@ -745,6 +781,12 @@ export interface components {
         JobCancel: {
             reason: string;
         };
+        JobCategoryInfo: {
+            value: string;
+            label: string;
+            major_skill_ids: number[];
+            minor_skill_ids: number[];
+        };
         /** @description POST /jobs/. No organization, status, technician, version or lat/lng. */
         JobCreate: {
             title: string;
@@ -752,6 +794,7 @@ export interface components {
             customer_name: string;
             customer_phone?: (string) | null;
             category: components["schemas"]["CategoryEnum"];
+            complexity?: components["schemas"]["ComplexityEnum"];
             is_urgent?: boolean;
             priority?: components["schemas"]["PriorityEnum"];
             address: string;
@@ -776,6 +819,7 @@ export interface components {
             readonly address: string;
             readonly postal_code: string;
             readonly category: components["schemas"]["CategoryEnum"];
+            readonly complexity: components["schemas"]["ComplexityEnum"];
             readonly is_urgent: boolean;
             readonly priority: components["schemas"]["PriorityEnum"];
             /** @default unassigned */
@@ -959,6 +1003,7 @@ export interface components {
             customer_name?: string;
             customer_phone?: (string) | null;
             category?: components["schemas"]["CategoryEnum"];
+            complexity?: components["schemas"]["ComplexityEnum"];
             is_urgent?: boolean;
             priority?: components["schemas"]["PriorityEnum"];
             address?: string;
@@ -1385,6 +1430,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    job_categories_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobCategoryInfo"][];
                 };
             };
         };

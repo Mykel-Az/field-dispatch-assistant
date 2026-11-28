@@ -9,7 +9,7 @@ import { NO_FILTERS, readFilters, writeFilters } from '../../shared/filters';
 import JobTags from '../../shared/components/JobTags';
 import { formatWhen, placeLine } from '../../shared/jobTime';
 import JobsMap from '../../shared/map/JobsMap';
-import { buildRouteLines } from '../../shared/map/routeLines';
+import { selectedRouteLines } from '../../shared/map/routeLines';
 import { useOffice } from '../../shared/map/useOffice';
 import { isJobStatus, JOB_STATUSES, STATUS_META } from '../../shared/status';
 import { useOrgTimezone } from '../../shared/useOrgTimezone';
@@ -39,7 +39,12 @@ export default function MapPage() {
   useEffect(() => {
     fetchTechnicians().then(setTechnicians).catch(() => setTechnicians([])); // colours only: the map still works without
   }, []);
-  const routes = useMemo(() => buildRouteLines(pins, technicians, office), [pins, technicians, office]);
+  // Pins only by default; a technician's route appears when that technician is picked.
+  const routes = useMemo(
+    () => selectedRouteLines(filters.technicians, pins, technicians, office),
+    [filters.technicians, pins, technicians, office],
+  );
+  const canShowRoutes = pins.some((p) => p.sequence_position !== null);
 
   const refresh = useCallback(async () => {
     const mine = ++latest.current; // a slow older answer must not overwrite a newer one
@@ -137,6 +142,9 @@ export default function MapPage() {
           <li className="flex items-center gap-1.5">
             <span aria-hidden="true" className="inline-block size-4 rounded bg-ink" /> Office
           </li>
+        )}
+        {routes.length === 0 && canShowRoutes && (
+          <li>Pick a technician (and a day) in the filters to see their route.</li>
         )}
         {routes.length > 0 && (
           <li className="flex items-center gap-1.5">

@@ -29,7 +29,7 @@ def test_two_runs_at_once_never_double_assign_or_reuse_a_stop_number(
     org_a.max_jobs_per_tech_per_day = 10
     org_a.save()
     # transaction=True tests empty the tables afterwards, seeded skills included
-    hvac, _ = Skill.objects.get_or_create(name="HVAC")
+    hvac, _ = Skill.objects.get_or_create(name="Heating & Air Conditioning")
     technician_of(technician_a).skills.add(hvac)
     jobs = [
         make_job(

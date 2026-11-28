@@ -20,7 +20,11 @@ own arrival and deadline rules (`dispatch_engine/metrics.py`, pure, no customer 
 ADR-019). Each side reports jobs placed, jobs that could not be placed, SLA breaches,
 minutes late, miles driven, and workload spread (most jobs minus fewest). Jobs the
 engine left in the queue are counted separately as `in_queue` and are in neither side.
-The plan page shows the two columns side by side.
+The plan page draws one card per measure (late arrivals, minutes late, driving, uneven
+workload) with two bars, planner and round-robin, scaled against each other, and a plain
+verdict ("Planner is better", "Round-robin is better", "Same") with a glyph so it is not
+colour alone. A headline counts the measures the planner wins. A table of numbers was
+tried first and replaced: it was hard to scan and did not suit a dispatcher glancing at it.
 
 ## Alternatives
 - **Compare against random assignment.** Rejected: a strawman nobody uses.

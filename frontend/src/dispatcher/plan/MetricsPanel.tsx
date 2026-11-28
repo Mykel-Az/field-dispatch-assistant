@@ -1,24 +1,43 @@
 import { useEffect, useState } from 'react';
 import { fetchScheduleMetrics } from '../../shared/api/client';
-import type { DayMetrics, PlanMetrics } from '../../shared/api/models';
+import type { DayMetrics } from '../../shared/api/models';
 import { ui } from '../../shared/ui';
-import { milesSaved } from './metricsModel';
+import { barWidths, MEASURES, winner, type Winner } from './metricsModel';
 
-type Row = { label: string; value: (m: PlanMetrics) => string };
+const VERDICT: Record<Winner, { glyph: string; text: string }> = {
+  planner: { glyph: '✓', text: 'Planner is better' },
+  baseline: { glyph: '✗', text: 'Round-robin is better' },
+  same: { glyph: '=', text: 'Same' },
+};
 
-const ROWS: Row[] = [
-  { label: 'Jobs placed', value: (m) => String(m.jobs - m.unplaced) },
-  { label: 'Could not be placed', value: (m) => String(m.unplaced) },
-  { label: 'SLA breaches', value: (m) => String(m.sla_breaches) },
-  { label: 'Minutes late', value: (m) => String(m.late_minutes) },
-  { label: 'Miles driven', value: (m) => m.travel_miles.toFixed(1) },
-  {
-    label: 'Workload spread (max − min jobs)',
-    value: (m) => String(m.workload_spread),
-  },
-];
+function Bar({
+  name,
+  shown,
+  width,
+  strong,
+}: {
+  name: string;
+  shown: string;
+  width: number;
+  strong: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="w-24 shrink-0">{name}</span>
+      <div className="h-3 flex-1 rounded bg-canvas" aria-hidden="true">
+        <div
+          className={`h-3 rounded ${strong ? 'bg-brand' : 'bg-line-strong'}`}
+          style={{ width: `${width}%` }}
+        />
+      </div>
+      <span className={`w-16 shrink-0 text-right tabular-nums ${strong ? 'font-bold' : ''}`}>
+        {shown}
+      </span>
+    </div>
+  );
+}
 
-/** Before/after: this day as planned, against dealing the same jobs out round-robin. */
+/** The day as planned against dealing the same jobs out round-robin: shorter bars are better. */
 export default function MetricsPanel({ date, refreshKey }: { date: string; refreshKey: unknown }) {
   const [metrics, setMetrics] = useState<DayMetrics | null>(null);
   const [failed, setFailed] = useState(false);
@@ -43,47 +62,67 @@ export default function MetricsPanel({ date, refreshKey }: { date: string; refre
 
   if (failed) return <p className={`${ui.muted} mb-4`}>Could not load the comparison.</p>;
   if (!metrics || metrics.jobs === 0) return null;
-  const saved = milesSaved(metrics.plan, metrics.baseline);
+
+  const results = MEASURES.map((m) => ({ m, w: winner(m, metrics.plan, metrics.baseline) }));
+  const better = results.filter((r) => r.w === 'planner').length;
+  const worse = results.filter((r) => r.w === 'baseline').length;
+  const unplaced = metrics.plan.unplaced > 0 || metrics.baseline.unplaced > 0;
 
   return (
     <section aria-labelledby="metrics-title" className="mb-6">
       <h2 id="metrics-title" className="mb-1 text-xl font-bold">
         Planner vs round-robin
       </h2>
+      <p className="mb-1 font-semibold">
+        The planner is better on {better} of {MEASURES.length} measures
+        {worse > 0 ? ` and worse on ${worse}` : ''}.
+      </p>
       <p className={`${ui.muted} mb-3`}>
         The same {metrics.jobs} {metrics.jobs === 1 ? 'job' : 'jobs'}, timed from the start of the
         day. Round-robin deals jobs out in turn to technicians who have the skill, ignoring
-        distance, load and deadlines.
+        distance, load and deadlines. Shorter bars are better.
         {metrics.in_queue > 0 && ` ${metrics.in_queue} still in the queue are not counted.`}
       </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr>
-              <th scope="col" className="py-1 pr-4"></th>
-              <th scope="col" className="py-1 pr-4">
-                Planner
-              </th>
-              <th scope="col" className="py-1">
-                Round-robin
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {ROWS.map((row) => (
-              <tr key={row.label} className="border-t border-line">
-                <th scope="row" className="py-1 pr-4 font-normal">
-                  {row.label}
-                </th>
-                <td className="py-1 pr-4 font-semibold">{row.value(metrics.plan)}</td>
-                <td className="py-1">{row.value(metrics.baseline)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {saved !== null && saved > 0 && (
-        <p className="mt-2 text-sm font-semibold">The planner drives {saved}% fewer miles.</p>
+      <ul className="grid gap-3 md:grid-cols-2">
+        {results.map(({ m, w }) => {
+          const [planWidth, baseWidth] = barWidths(
+            m.value(metrics.plan),
+            m.value(metrics.baseline),
+          );
+          const verdict = VERDICT[w];
+          return (
+            <li key={m.key} className={ui.card}>
+              <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
+                <h3 className="font-bold">{m.label}</h3>
+                <span className="text-sm font-semibold">
+                  <span aria-hidden="true">{verdict.glyph} </span>
+                  {verdict.text}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                <Bar
+                  name="Planner"
+                  shown={m.format(m.value(metrics.plan))}
+                  width={planWidth}
+                  strong
+                />
+                <Bar
+                  name="Round-robin"
+                  shown={m.format(m.value(metrics.baseline))}
+                  width={baseWidth}
+                  strong={false}
+                />
+              </div>
+              <p className={`${ui.muted} mt-2 text-sm`}>{m.hint}</p>
+            </li>
+          );
+        })}
+      </ul>
+      {unplaced && (
+        <p className={`${ui.notice} mt-3`}>
+          Jobs that could not be placed: planner {metrics.plan.unplaced}, round-robin{' '}
+          {metrics.baseline.unplaced}.
+        </p>
       )}
     </section>
   );

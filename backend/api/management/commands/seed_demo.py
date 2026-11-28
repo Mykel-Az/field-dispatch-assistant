@@ -40,14 +40,24 @@ OTHER_ORG_NAME = "Northwind Repairs (other organization)"
 STAFF = [
     ("head@demo.example", "Priya Nair", "head_dispatcher", None),
     ("dispatcher@demo.example", "Alex Morgan", "dispatcher", None),
-    ("dana@demo.example", "Dana Reyes", "technician", ["HVAC", "Electrical"]),
-    ("tomas@demo.example", "Tomás Silva", "technician", ["Appliance Repair"]),
-    ("aisha@demo.example", "Aisha Bello", "technician", ["Electrical", "HVAC"]),
+    (
+        "dana@demo.example",
+        "Dana Reyes",
+        "technician",
+        ["Heating & Air Conditioning", "Electricians"],
+    ),
+    ("tomas@demo.example", "Tomás Silva", "technician", ["Appliances and Repair"]),
+    (
+        "aisha@demo.example",
+        "Aisha Bello",
+        "technician",
+        ["Electricians", "Heating & Air Conditioning"],
+    ),
     (
         "marcus@demo.example",
         "Marcus Chen",
         "technician",
-        ["HVAC", "Electrical", "Appliance Repair"],
+        ["Heating & Air Conditioning", "Electricians", "Appliances and Repair"],
     ),
 ]
 

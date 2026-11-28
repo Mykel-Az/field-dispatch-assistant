@@ -33,7 +33,7 @@ def org(org_a):
 
 @pytest.fixture
 def hvac(db):
-    return Skill.objects.get(name="HVAC")
+    return Skill.objects.get(name="Heating & Air Conditioning")
 
 
 @pytest.fixture
@@ -183,7 +183,7 @@ def test_an_unconfigured_organization_cannot_be_planned(org_a, dispatcher_a):
 def test_a_job_nobody_can_take_stays_unassigned_with_a_stored_reason(
     org, dispatcher_a, tech
 ):
-    other_skill = Skill.objects.exclude(name="HVAC").first()
+    other_skill = Skill.objects.exclude(name="Heating & Air Conditioning").first()
     j = job(org, skills=[other_skill])
     result = run(org, dispatcher_a)
     assert fresh(j).status == JobStatus.UNASSIGNED
@@ -306,7 +306,9 @@ def test_the_stored_plan_reads_back_exactly_as_the_run_returned_it(
     org, dispatcher_a, tech
 ):
     placed = job(org)
-    nobody = job(org, skills=[Skill.objects.exclude(name="HVAC").first()])
+    nobody = job(
+        org, skills=[Skill.objects.exclude(name="Heating & Air Conditioning").first()]
+    )
     nowhere = job(org, geocode_status="failed", lat=None, lng=None)
     ran = run(org, dispatcher_a)
     again = read(org)
@@ -444,7 +446,9 @@ def test_an_any_time_job_is_planned_inside_the_opening_hours(org, dispatcher_a, 
 
 # ---- the decision trail ------------------------------------------------------
 def test_a_run_logs_one_summary_line_at_info(caplog, org, dispatcher_a, tech):
-    job(org, title="Fix AC").acceptable_skills.add(Skill.objects.get(name="HVAC"))
+    job(org, title="Fix AC").acceptable_skills.add(
+        Skill.objects.get(name="Heating & Air Conditioning")
+    )
     with caplog.at_level("INFO", logger="api.services.scheduling"):
         run(org, dispatcher_a)
     (record,) = [r for r in caplog.records if r.name == "api.services.scheduling"]
@@ -462,7 +466,7 @@ def test_plan_trace_prints_the_decisions_and_saves_nothing(
     from django.core.management import call_command
 
     made = job(org, title="Fix AC")
-    made.acceptable_skills.add(Skill.objects.get(name="HVAC"))
+    made.acceptable_skills.add(Skill.objects.get(name="Heating & Air Conditioning"))
     out = StringIO()
     call_command(
         "plan_trace", email=dispatcher_a.email, date=DAY.isoformat(), stdout=out

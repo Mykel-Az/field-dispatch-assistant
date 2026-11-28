@@ -42,3 +42,23 @@ export function buildRouteLines(
   }
   return lines.sort((a, b) => a.key.localeCompare(b.key));
 }
+
+/**
+ * Route lines only for the technicians the dispatcher picked. With nobody picked the map
+ * shows just the pins: lines for every technician on every day are clutter, not an answer.
+ * (Narrow to one day with the day filter.)
+ */
+export function selectedRouteLines(
+  selectedTechnicianIds: string[],
+  pins: MapPin[],
+  technicians: Technician[],
+  office: { lat: number; lng: number } | null,
+): RouteLine[] {
+  if (selectedTechnicianIds.length === 0) return [];
+  const chosen = new Set(selectedTechnicianIds);
+  return buildRouteLines(
+    pins.filter((p) => p.technician_id !== null && chosen.has(String(p.technician_id))),
+    technicians,
+    office,
+  );
+}

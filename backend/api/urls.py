@@ -4,6 +4,7 @@ from rest_framework.routers import SimpleRouter
 from .views import (
     ChangePasswordView,
     GeocodeLookupView,
+    JobCategoriesView,
     JobViewSet,
     LoginView,
     LogoutView,
@@ -33,6 +34,7 @@ router.register("jobs", JobViewSet, basename="job")
 urlpatterns = [
     path("health/", health_check, name="health_check"),
     path("skills/", SkillViewSet.as_view(), name="skills"),
+    path("job-categories/", JobCategoriesView.as_view(), name="job-categories"),
     path("auth/csrf/", get_csrf_token, name="csrf"),
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/login/", LoginView.as_view(), name="login"),
